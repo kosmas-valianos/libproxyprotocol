@@ -7,90 +7,7 @@
 #include <limits.h>
 #include <arpa/inet.h>
 
-typedef char ip_str_t[INET6_ADDRSTRLEN];
-
-typedef struct
-{
-    uint32_t  size;
-    uint32_t  len;
-    uint8_t  *data;
-} bytes_msg_t;
-
-typedef struct
-{
-    ip_str_t  src_ip_str;
-    uint16_t src_port;
-    ip_str_t  dst_ip_str;
-    uint16_t dst_port;
-} proxy_info_t;
-
-typedef bool (*proxy_protocol_parser) (const uint8_t *pkt, uint32_t pktlen, proxy_info_t *proxy_info);
-
-static char *byte_array_to_hex_str(const uint8_t *byte_array, uint32_t byte_array_size, char **hex_str)
-{
-    static const char *hex_chars = "0123456789abcdef";
-    *hex_str = malloc(2 * byte_array_size + 1);
-    uint32_t i = 0;
-    for (i = 0; i < byte_array_size; i++)
-    {
-        (*hex_str)[2*i    ] = hex_chars[(byte_array[i] >> 4) & 0xf];
-        (*hex_str)[2*i + 1] = hex_chars[(byte_array[i]     ) & 0xf];
-    }
-    (*hex_str)[2 * byte_array_size] = '\0';
-    return *hex_str;
-}
-
-static void bytes_msg_ensure(bytes_msg_t *bytes_msg, uint32_t size)
-{
-    size += bytes_msg->len;
-    if (size > bytes_msg->size)
-    {
-        bytes_msg->data = realloc(bytes_msg->data, size);
-        bytes_msg->size = size;
-    }
-}
-
-static void bytes_msg_append(bytes_msg_t *bytes_msg, const void *data, uint32_t length)
-{
-    bytes_msg_ensure(bytes_msg, length);
-    memcpy(bytes_msg->data + bytes_msg->len, data, length);
-    bytes_msg->len += length;
-}
-
-static bool check_strtoul_ret(const char *str, const char *endptr, uint64_t res)
-{
-    if (endptr == str)
-    {
-        fprintf(stderr, "strtoul() failed");
-        return false;
-    }
-    else if ((res == ULONG_MAX && errno == ERANGE) || errno == EINVAL)
-    {
-        fprintf(stderr, "strtoul() failed: %s", strerror(errno));
-        return false;
-    }
-    else
-    {
-        return true;
-    }
-}
-
-static bool parse_port(const char *value, uint16_t *usport)
-{
-    uint64_t port = strtoul(value, NULL, 10);
-    if (!check_strtoul_ret(value, NULL, port))
-    {
-        fprintf(stderr, "Invalid port %s", value);
-        return false;
-    }
-    if (port == 0 || port > UINT16_MAX)
-    {
-        fprintf(stderr, "Illegal port %s", value);
-        return false;
-    }
-    *usport = (uint16_t) port;
-    return true;
-}
+#pragma pack(1)
 
 /******************* PROXY Protocol Version 1 *******************/
 /*
@@ -115,10 +32,12 @@ So a 108-byte buffer is always enough to store all the line and a trailing zero
 for string processing.
  */
 
+static const char *crlf = "\r\n";
+
 typedef struct
 {
     char block[108];
-} __attribute__((packed)) proxy_hdr_v1_t;
+} proxy_hdr_v1_t;
 
 /****************************************************************/
 
@@ -130,7 +49,7 @@ typedef struct
     uint8_t  ver_cmd;  /* protocol version and command */
     uint8_t  fam;      /* protocol family and address */
     uint16_t len;      /* number of following bytes part of the header */
-} __attribute__((packed)) proxy_hdr_v2_t;
+} proxy_hdr_v2_t;
 
 typedef union
 {
@@ -175,7 +94,7 @@ typedef struct
     uint8_t type;
     uint8_t length_hi;
     uint8_t length_lo;
-    uint8_t value[0];
+    uint8_t value[1];
 } pp2_tlv_t;
 
 /* PP2_TYPE_SSL type and subtypes */
@@ -187,7 +106,7 @@ typedef struct
 {
     uint8_t   client;
     uint32_t  verify;
-    pp2_tlv_t sub_tlv[0];
+    pp2_tlv_t sub_tlv[1];
 } pp2_tlv_ssl_t;
 
 /* PP2_TYPE_AWS type and subtypes */
@@ -196,26 +115,50 @@ typedef struct
 typedef struct
 {
     uint8_t type;
-    uint8_t value[0];
+    uint8_t value[1];
 } pp2_tlv_aws_t;
 
 /****************************************************************/
 
-bytes_msg_t *proxy_create_message_v1(uint8_t fam, const proxy_info_t *proxy_info)
+#pragma pack()
+
+typedef char ip_str_t[INET6_ADDRSTRLEN];
+
+typedef struct
 {
-    char proxy_message_v1_str[sizeof(proxy_hdr_v1_t)];
-    char *inet_family = (fam == AF_INET) ? "TCP4" : "TCP6";
-    snprintf(proxy_message_v1_str, sizeof(proxy_message_v1_str), "PROXY %s %s %s %hu %hu", inet_family, proxy_info->src_ip_str, proxy_info->dst_ip_str, proxy_info->src_port, proxy_info->dst_port);
-    fprintf(stderr, "Created v1 PROXY message \"%s\"", proxy_message_v1_str);
+    ip_str_t  src_ip_str;
+    uint16_t  src_port;
+    ip_str_t  dst_ip_str;
+    uint16_t  dst_port;
+} pp_info_t;
 
-    bytes_msg_t *bytes_msg = calloc(1, sizeof(*bytes_msg));
-    bytes_msg_append(bytes_msg, (uint8_t *) proxy_message_v1_str, strlen(proxy_message_v1_str));
-    bytes_msg_append(bytes_msg, (uint8_t *) "\r\n", 2);
-
-    return bytes_msg;
+static char *byte_array_to_hex_str(const uint8_t *byte_array, uint32_t byte_array_size, char **hex_str)
+{
+    static const char *hex_chars = "0123456789abcdef";
+    *hex_str = malloc(2 * byte_array_size + 1);
+    uint32_t i = 0;
+    for (i = 0; i < byte_array_size; i++)
+    {
+        (*hex_str)[2*i    ] = hex_chars[(byte_array[i] >> 4) & 0xf];
+        (*hex_str)[2*i + 1] = hex_chars[(byte_array[i]     ) & 0xf];
+    }
+    (*hex_str)[2 * byte_array_size] = '\0';
+    return *hex_str;
 }
 
-bytes_msg_t *proxy_create_message_v2(uint8_t fam, const proxy_info_t *proxy_info)
+static bool parse_port(const char *value, uint16_t *usport)
+{
+    uint64_t port = strtoul(value, NULL, 10);
+    if (port == 0 || port > UINT16_MAX)
+    {
+        fprintf(stderr, "Illegal port %s", value);
+        return false;
+    }
+    *usport = (uint16_t) port;
+    return true;
+}
+
+uint8_t *ppv2_create_message(uint8_t fam, const pp_info_t *proxy_info)
 {
     typedef struct
     {
@@ -262,29 +205,31 @@ bytes_msg_t *proxy_create_message_v2(uint8_t fam, const proxy_info_t *proxy_info
         msg.proxy_addr.ipv6_addr.dst_port = htons(proxy_info->dst_port);
     }
 
-    /* Serialize the msg into a buffer */
-    bytes_msg_t *bytes_msg = calloc(1, sizeof(*bytes_msg));
-
-    /* Header */
-    bytes_msg_append(bytes_msg, (uint8_t *) &msg.proxy_hdr_v2, sizeof(proxy_hdr_v2_t));
-
-    /* Rest of the data */
-    bytes_msg_append(bytes_msg, (uint8_t *) &msg.proxy_addr, len);
+    /* Serialize the msg */
+    uint32_t pp_msg_v2_len = sizeof(proxy_hdr_v2_t) + len;
+    uint8_t *pp_msg_v2 = malloc(pp_msg_v2_len);
+    memcpy(pp_msg_v2, &msg.proxy_hdr_v2, sizeof(proxy_hdr_v2_t));
+    memcpy(pp_msg_v2 + sizeof(proxy_hdr_v2_t), &msg.proxy_addr, len);
 
     char *hex_str_msg = NULL;
-    fprintf(stderr, "Created v2 PROXY message %s", byte_array_to_hex_str(bytes_msg->data, bytes_msg->len, &hex_str_msg));
+    fprintf(stderr, "Created v2 PROXY message %s", byte_array_to_hex_str(pp_msg_v2, pp_msg_v2_len, &hex_str_msg));
     free(hex_str_msg);
 
-    return bytes_msg;
+    return pp_msg_v2;
 }
 
-/* DOES NOT check if it is a version 2 valid PROXY message */
-static uint32_t proxy_get_size_v2(const uint8_t *pkt)
+char *ppv1_create_message(uint8_t fam, const pp_info_t *proxy_info)
 {
-    proxy_hdr_v2_t *proxy_hdr = (proxy_hdr_v2_t *) pkt;
-    uint16_t len = sizeof(proxy_hdr_v2_t) + ntohs(proxy_hdr->len);
-    fprintf(stderr, "v2 PROXY message is %u bytes", len);
-    return  (uint32_t) len;
+    char *inet_family = fam == AF_INET ? "TCP4" : "TCP6";
+    uint32_t pp_msg_v1_len = sizeof(proxy_hdr_v1_t) + strlen(crlf);
+    char *pp_msg_v1 = malloc(pp_msg_v1_len);
+    sprintf(pp_msg_v1, "PROXY %s %s %s %hu %hu",
+        inet_family, proxy_info->src_ip_str, proxy_info->dst_ip_str, proxy_info->src_port, proxy_info->dst_port);
+    memcpy(pp_msg_v1 + sizeof(proxy_hdr_v1_t), crlf, strlen(crlf));
+    char *hex_str_msg = NULL;
+    fprintf(stderr, "Created v1 PROXY message \"%s\"", byte_array_to_hex_str((uint8_t *)pp_msg_v1, pp_msg_v1_len, &hex_str_msg));
+    free(hex_str_msg);
+    return pp_msg_v1;
 }
 
 /*****************************************************************/
@@ -385,7 +330,7 @@ static uint32_t crc32c(uint8_t *buf, uint32_t len)
 }
 
 /* Verifies and parses a version 2 PROXY message */
-static bool proxy_parse_message_v2(const uint8_t *pkt, uint32_t pktlen, proxy_info_t *proxy_info)
+static bool ppv2_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info)
 {
     uint8_t *proxy_msg = (uint8_t *) pkt;
     proxy_hdr_v2_t *proxy_hdr = (proxy_hdr_v2_t *) pkt;
@@ -576,17 +521,8 @@ static bool proxy_parse_message_v2(const uint8_t *pkt, uint32_t pktlen, proxy_in
     return true;
 }
 
-/* DOES NOT check if it is a version 1 valid PROXY message */
-static uint32_t proxy_get_size_v1(const uint8_t *pkt, uint32_t pktlen)
-{
-    uint32_t i = 0;
-    while (i < pktlen && pkt[i++] != '\n');
-    fprintf(stderr, "v1 PROXY message is %u bytes. Packet read/peeked is %u bytes", i, pktlen);
-    return i;
-}
-
 /* Verifies and parses a version 1 PROXY message */
-static bool proxy_parse_message_v1(const uint8_t *pkt, uint32_t pktlen, proxy_info_t *proxy_info)
+static bool ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info)
 {
     uint32_t pkt_str_length = pktlen + 1;
     /* C-string to work with */
@@ -594,7 +530,7 @@ static bool proxy_parse_message_v1(const uint8_t *pkt, uint32_t pktlen, proxy_in
     memcpy(pkt_str, pkt, pktlen);
     pkt_str[pktlen] = '\0';
 
-    char *ptr = strstr(pkt_str, "\r\n");
+    char *ptr = strstr(pkt_str, crlf);
     if (!ptr)
     {
         fprintf(stderr, "Invalid v1 PROXY message: \"\\r\\n\" is missing");
@@ -665,7 +601,7 @@ static bool proxy_parse_message_v1(const uint8_t *pkt, uint32_t pktlen, proxy_in
         fprintf(stderr, "Invalid v1 PROXY message: invalid source address %s", src_address);
         return false;
     }
-    snprintf(proxy_info->src_ip_str, sizeof(ip_str_t), "%s", src_address);
+    memcpy(proxy_info->src_ip_str, src_address, sizeof(proxy_info->src_ip_str));
     index += strlen(src_address);
 
     /* Exactly one space */
@@ -684,7 +620,7 @@ static bool proxy_parse_message_v1(const uint8_t *pkt, uint32_t pktlen, proxy_in
         fprintf(stderr, "Invalid v1 PROXY message: invalid destination address %s", dst_address);
         return false;
     }
-    snprintf(proxy_info->dst_ip_str, sizeof(ip_str_t), "%s", dst_address);
+    memcpy(proxy_info->dst_ip_str, dst_address, sizeof(proxy_info->dst_ip_str));
     index += strlen(dst_address);
 
     /* Ignore message if it is a health check */
@@ -739,31 +675,15 @@ static bool proxy_parse_message_v1(const uint8_t *pkt, uint32_t pktlen, proxy_in
     return true;
 }
 
-uint32_t proxy_message(const uint8_t *pkt, uint32_t pktlen, proxy_protocol_parser *parser_func, uint8_t *proxy_protocol)
+bool pp_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info)
 {
     if (pktlen > 16 && !memcmp(pkt, "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A\x21", 13))
     {
-        if (parser_func)
-        {
-            *parser_func = proxy_parse_message_v2;
-        }
-        if (proxy_protocol)
-        {
-            *proxy_protocol = 2;
-        }
-        return proxy_get_size_v2(pkt);
+        return ppv2_parse(pkt, pktlen, proxy_info);
     }
     else if (pktlen > 8 && !memcmp(pkt, "\x50\x52\x4F\x58\x59", 5))
     {
-        if (parser_func)
-        {
-            *parser_func = proxy_parse_message_v1;
-        }
-        if (proxy_protocol)
-        {
-            *proxy_protocol = 1;
-        }
-        return proxy_get_size_v1(pkt, pktlen);
+        return ppv1_parse(pkt, pktlen, proxy_info);;
     }
     else
     {
