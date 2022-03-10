@@ -1,11 +1,10 @@
-#include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <errno.h>
-#include <stdbool.h>
 #include <string.h>
 #include <limits.h>
-#include <arpa/inet.h>
+
+#include "proxy_protocol.h"
 
 #pragma pack(1)
 
@@ -122,16 +121,6 @@ typedef struct
 
 #pragma pack()
 
-typedef char ip_str_t[INET6_ADDRSTRLEN];
-
-typedef struct
-{
-    ip_str_t  src_ip_str;
-    uint16_t  src_port;
-    ip_str_t  dst_ip_str;
-    uint16_t  dst_port;
-} pp_info_t;
-
 static char *byte_array_to_hex_str(const uint8_t *byte_array, uint32_t byte_array_size, char **hex_str)
 {
     static const char *hex_chars = "0123456789abcdef";
@@ -158,7 +147,7 @@ static bool parse_port(const char *value, uint16_t *usport)
     return true;
 }
 
-uint8_t *ppv2_create_message(uint8_t fam, const pp_info_t *proxy_info)
+uint8_t *ppv2_create_message(uint8_t fam, const pp_info_t *proxy_info, uint32_t *pp_msg_v2_len)
 {
     typedef struct
     {
@@ -206,13 +195,13 @@ uint8_t *ppv2_create_message(uint8_t fam, const pp_info_t *proxy_info)
     }
 
     /* Serialize the msg */
-    uint32_t pp_msg_v2_len = sizeof(proxy_hdr_v2_t) + len;
-    uint8_t *pp_msg_v2 = malloc(pp_msg_v2_len);
+    *pp_msg_v2_len = sizeof(proxy_hdr_v2_t) + len;
+    uint8_t *pp_msg_v2 = malloc(*pp_msg_v2_len);
     memcpy(pp_msg_v2, &msg.proxy_hdr_v2, sizeof(proxy_hdr_v2_t));
     memcpy(pp_msg_v2 + sizeof(proxy_hdr_v2_t), &msg.proxy_addr, len);
 
     char *hex_str_msg = NULL;
-    fprintf(stderr, "Created v2 PROXY message %s", byte_array_to_hex_str(pp_msg_v2, pp_msg_v2_len, &hex_str_msg));
+    fprintf(stderr, "Created v2 PROXY message %s\n", byte_array_to_hex_str(pp_msg_v2, *pp_msg_v2_len, &hex_str_msg));
     free(hex_str_msg);
 
     return pp_msg_v2;
@@ -377,7 +366,7 @@ static bool ppv2_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
         return false;
     }
     char *hex_str = NULL;
-    fprintf(stderr, "v2 PROXY message: %s",  byte_array_to_hex_str(proxy_msg, sizeof(proxy_hdr_v2_t) + len, &hex_str));
+    fprintf(stderr, "v2 PROXY message: %s\n",  byte_array_to_hex_str(proxy_msg, sizeof(proxy_hdr_v2_t) + len, &hex_str));
     free(hex_str);
 
     /*
@@ -517,7 +506,7 @@ static bool ppv2_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
         pkt += pp2_tlv_offset; tlv_vectors_len -= pp2_tlv_offset;
     }
 
-    fprintf(stderr, "ELB %s:%hu Client %s:%hu", proxy_info->dst_ip_str, proxy_info->dst_port, proxy_info->src_ip_str, proxy_info->src_port);
+    fprintf(stderr, "ELB %s:%hu Client %s:%hu\n", proxy_info->dst_ip_str, proxy_info->dst_port, proxy_info->src_ip_str, proxy_info->src_port);
     return true;
 }
 
