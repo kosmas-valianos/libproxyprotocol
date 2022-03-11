@@ -21,8 +21,8 @@ typedef struct
     uint16_t  dst_port;
 } pp_info_t;
 
-uint8_t *ppv2_create_message(uint8_t fam, const pp_info_t *proxy_info, uint32_t *pp_msg_v2_len);
-char    *ppv1_create_message(uint8_t fam, const pp_info_t *proxy_info, uint32_t* pp_msg_v1_len);
-bool     pp_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info);
+uint8_t *ppv2_create_message(uint8_t fam, const pp_info_t *proxy_info, uint32_t *pp_msg_v2_len, int *error);
+char    *ppv1_create_message(uint8_t fam, const pp_info_t *proxy_info, uint32_t* pp_msg_v1_len, int *error);
+int      pp_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info);
 
 #endif

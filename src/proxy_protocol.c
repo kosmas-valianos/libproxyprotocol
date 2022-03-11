@@ -30,12 +30,8 @@ So a 108-byte buffer is always enough to store all the line and a trailing zero
 for string processing.
  */
 
+#define PP1_MAX_LENGHT 108
 static const char *crlf = "\r\n";
-
-typedef struct
-{
-    char block[108];
-} proxy_hdr_v1_t;
 
 /****************************************************************/
 
@@ -120,19 +116,58 @@ typedef struct
 
 #pragma pack()
 
-static char *byte_array_to_hex_str(const uint8_t *byte_array, uint32_t byte_array_size, char **hex_str)
+enum
 {
-    static const char *hex_chars = "0123456789abcdef";
-    *hex_str = malloc(2 * byte_array_size + 1);
-    uint32_t i = 0;
-    for (i = 0; i < byte_array_size; i++)
-    {
-        (*hex_str)[2*i    ] = hex_chars[(byte_array[i] >> 4) & 0xf];
-        (*hex_str)[2*i + 1] = hex_chars[(byte_array[i]     ) & 0xf];
-    }
-    (*hex_str)[2 * byte_array_size] = '\0';
-    return *hex_str;
-}
+    ERR_NULL,
+    ERR_PP2_SIG,
+    ERR_PP2_VERSION_CMD,
+    ERR_PP2_VERSION_TRANSPORT_FAMILY,
+    ERR_PP2_LENGTH,
+    ERR_PP2_IPV4_SRC_IP,
+    ERR_PP2_IPV4_DST_IP,
+    ERR_PP2_IPV6_SRC_IP,
+    ERR_PP2_IPV6_DST_IP,
+    ERR_PP2_UNSUPPORTED,
+    ERR_PP2_TLV_LENGTH,
+    ERR_PP2_TYPE_CRC32C,
+    ERR_PP2_TYPE_AWS,
+    ERR_PP1_CRLF,
+    ERR_PP1_PROXY,
+    ERR_PP1_SPACE,
+    ERR_PP1_VERSION_TRANSPORT_FAMILY,
+    ERR_PP1_IPV4_SRC_IP,
+    ERR_PP1_IPV4_DST_IP,
+    ERR_PP1_IPV6_SRC_IP,
+    ERR_PP1_IPV6_DST_IP,
+    ERR_PP1_SRC_PORT,
+    ERR_PP1_DST_PORT,
+};
+
+static const char *errors[] = {
+    "No error",
+    "Invalid v2 PROXY message: wrong protocol signature",
+    "Invalid v2 PROXY message: wrong protocol version or command: %d. Only 0x21 is accepted",
+    "Invalid v2 PROXY message: wrong transport protocol or address family",
+    "Invalid v2 PROXY message: length",
+    "Invalid v2 PROXY message: invalid IPv4 src IP",
+    "Invalid v2 PROXY message: invalid IPv4 dst IP"
+    "Invalid v2 PROXY message: invalid IPv6 src IP",
+    "Invalid v2 PROXY message: invalid IPv6 dst IP",
+    "Invalid v2 PROXY message: unsupported",
+    "Invalid v2 PROXY message: invalid TLV vector's length",
+    "Invalid v2 PROXY message: invalid PP2_TYPE_CRC32C",
+    "Invalid v2 PROXY message: invalid PP2_TYPE_AWS",
+    "Invalid v1 PROXY message: \"\\r\\n\" is missing",
+    "Invalid v1 PROXY message: \"PROXY\" is missing",
+    "Invalid v1 PROXY message: space is missing",
+    "Invalid v1 PROXY message: wrong transport protocol or address family",
+    "Invalid v1 PROXY message: invalid IPv4 src IP",
+    "Invalid v1 PROXY message: invalid IPv4 dst IP"
+    "Invalid v1 PROXY message: invalid IPv6 src IP",
+    "Invalid v1 PROXY message: invalid IPv6 dst IP",
+    "Invalid v1 PROXY message: invalid src port",
+    "Invalid v1 PROXY message: invalid dst port",
+};
 
 static bool parse_port(const char *value, uint16_t *usport)
 {
@@ -146,7 +181,7 @@ static bool parse_port(const char *value, uint16_t *usport)
     return true;
 }
 
-uint8_t *ppv2_create_message(uint8_t fam, const pp_info_t *proxy_info, uint32_t *pp_msg_v2_len)
+uint8_t *ppv2_create_message(uint8_t fam, const pp_info_t *proxy_info, uint32_t *pp_msg_v2_len, int *error)
 {
     typedef struct
     {
@@ -166,12 +201,12 @@ uint8_t *ppv2_create_message(uint8_t fam, const pp_info_t *proxy_info, uint32_t 
     {
         if (inet_pton(AF_INET, proxy_info->src_ip_str, &msg.proxy_addr.ipv4_addr.src_addr) != 1)
         {
-            fprintf(stderr, "Invalid v2 PROXY message: invalid IPv4 src IP: %s", proxy_info->src_ip_str);
+            *error = ERR_PP2_IPV4_SRC_IP;
             return NULL;
         }
         if (inet_pton(AF_INET, proxy_info->dst_ip_str, &msg.proxy_addr.ipv4_addr.dst_addr) != 1)
         {
-            fprintf(stderr, "Invalid v2 PROXY message: invalid IPv4 dst IP: %s", proxy_info->dst_ip_str);
+            *error = ERR_PP2_IPV4_DST_IP;
             return NULL;
         }
         msg.proxy_addr.ipv4_addr.src_port = htons(proxy_info->src_port);
@@ -181,12 +216,12 @@ uint8_t *ppv2_create_message(uint8_t fam, const pp_info_t *proxy_info, uint32_t 
     {
         if (inet_pton(AF_INET6, proxy_info->src_ip_str, &msg.proxy_addr.ipv6_addr.src_addr) != 1)
         {
-            fprintf(stderr, "Invalid v2 PROXY message: invalid IPv4 src IP: %s", proxy_info->src_ip_str);
+            *error = ERR_PP2_IPV6_SRC_IP;
             return NULL;
         }
         if (inet_pton(AF_INET6, proxy_info->dst_ip_str, &msg.proxy_addr.ipv6_addr.dst_addr) != 1)
         {
-            fprintf(stderr, "Invalid v2 PROXY message: invalid IPv6 dst IP: %s", proxy_info->dst_ip_str);
+            *error = ERR_PP2_IPV6_DST_IP;
             return NULL;
         }
         msg.proxy_addr.ipv6_addr.src_port = htons(proxy_info->src_port);
@@ -199,21 +234,18 @@ uint8_t *ppv2_create_message(uint8_t fam, const pp_info_t *proxy_info, uint32_t 
     memcpy(pp_msg_v2, &msg.proxy_hdr_v2, sizeof(proxy_hdr_v2_t));
     memcpy(pp_msg_v2 + sizeof(proxy_hdr_v2_t), &msg.proxy_addr, len);
 
-    char *hex_str_msg = NULL;
-    fprintf(stderr, "Created v2 PROXY message %s\n", byte_array_to_hex_str(pp_msg_v2, *pp_msg_v2_len, &hex_str_msg));
-    free(hex_str_msg);
-
+    *error = ERR_NULL;
     return pp_msg_v2;
 }
 
-char *ppv1_create_message(uint8_t fam, const pp_info_t *proxy_info, uint32_t *pp_msg_v1_len)
+char *ppv1_create_message(uint8_t fam, const pp_info_t *proxy_info, uint32_t *pp_msg_v1_len, int *error)
 {
-    char *inet_family = fam == AF_INET ? "TCP4" : "TCP6";
-    *pp_msg_v1_len = sizeof(proxy_hdr_v1_t) + strlen(crlf);
+    char block[PP1_MAX_LENGHT];
+    *pp_msg_v1_len = snprintf(block, sizeof(block), "PROXY %s %s %s %hu %hu%s",
+        fam == AF_INET ? "TCP4" : "TCP6", proxy_info->src_ip_str, proxy_info->dst_ip_str, proxy_info->src_port, proxy_info->dst_port, crlf);
     char *pp_msg_v1 = malloc(*pp_msg_v1_len);
-    int n = snprintf(pp_msg_v1, *pp_msg_v1_len, "PROXY %s %s %s %hu %hu%s",
-        inet_family, proxy_info->src_ip_str, proxy_info->dst_ip_str, proxy_info->src_port, proxy_info->dst_port, crlf);
-    fprintf(stderr, "Created v1 PROXY message: %.*s\n", n - strlen(crlf), pp_msg_v1);
+    memcpy(pp_msg_v1, block, *pp_msg_v1_len);
+    *error = ERR_NULL;
     return pp_msg_v1;
 }
 
@@ -315,7 +347,7 @@ static uint32_t crc32c(uint8_t *buf, uint32_t len)
 }
 
 /* Verifies and parses a version 2 PROXY message */
-static bool ppv2_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info)
+static int ppv2_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info)
 {
     uint8_t *proxy_msg = (uint8_t *) pkt;
     proxy_hdr_v2_t *proxy_hdr = (proxy_hdr_v2_t *) pkt;
@@ -323,15 +355,13 @@ static bool ppv2_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
     /* Constant 12 bytes block containing the protocol signature */
     if (memcmp(proxy_hdr->sig, "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A", sizeof(proxy_hdr->sig)))
     {
-        fprintf(stderr, "Invalid v2 PROXY message: wrong protocol signature");
-        return false;
+        return ERR_PP2_SIG;
     }
 
     /* The next byte (the 13th one) is the protocol version and command */
     if (proxy_hdr->ver_cmd != 0x21)
     {
-        fprintf(stderr, "Invalid v2 PROXY message: wrong protocol version or command: %d. Only 0x21 is accepted!", proxy_hdr->ver_cmd);
-        return false;
+        return ERR_PP2_VERSION_CMD;
     }
 
     /*
@@ -350,20 +380,15 @@ static bool ppv2_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
     }
     else
     {
-        fprintf(stderr, "Invalid v2 PROXY message: wrong  transport protocol or address family: %d. Only \x11, \x21 are accepted", proxy_hdr->fam);
-        return false;
+        return ERR_PP2_VERSION_TRANSPORT_FAMILY;
     }
 
     /* The 15th and 16th bytes is the address length in bytes in network byte order */
     uint16_t len = ntohs(proxy_hdr->len);
     if (pktlen < sizeof(proxy_hdr_v2_t) + len)
     {
-        fprintf(stderr, "Invalid v2 PROXY message: length is %u bytes but packet read/peeked is only %u bytes", len, pktlen);
-        return false;
+        return ERR_PP2_LENGTH;
     }
-    char *hex_str = NULL;
-    fprintf(stderr, "v2 PROXY message: %s\n",  byte_array_to_hex_str(proxy_msg, sizeof(proxy_hdr_v2_t) + len, &hex_str));
-    free(hex_str);
 
     /*
      * Starting from the 17th byte, addresses are presented in network byte order
@@ -378,18 +403,13 @@ static bool ppv2_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
     uint16_t tlv_vectors_len = 0;
     if (sa_family == AF_INET && len >= sizeof(addr->ipv4_addr))
     {
-        if (!inet_ntop(sa_family, &addr->ipv4_addr.src_addr, proxy_info->src_ip_str, sizeof(ip_str_t))
-         || !inet_ntop(sa_family, &addr->ipv4_addr.dst_addr, proxy_info->dst_ip_str, sizeof(ip_str_t)))
+        if (!inet_ntop(sa_family, &addr->ipv4_addr.src_addr, proxy_info->src_ip_str, sizeof(ip_str_t)))
         {
-            fprintf(stderr, "Invalid v2 PROXY message: inet_ntop() failed for source/destination address: %s", strerror(errno));
-            return false;
+            return ERR_PP2_IPV4_SRC_IP;
         }
-
-        /* Ignore message if it is a health check */
-        if (addr->ipv4_addr.src_addr == addr->ipv4_addr.dst_addr)
+        if (!inet_ntop(sa_family, &addr->ipv4_addr.dst_addr, proxy_info->dst_ip_str, sizeof(ip_str_t)))
         {
-            fprintf(stderr, "v2 PROXY message is just a health check. Ignoring!");
-            return false;
+            return ERR_PP2_IPV4_DST_IP;
         }
 
         proxy_info->src_port = ntohs(addr->ipv4_addr.src_port);
@@ -400,18 +420,13 @@ static bool ppv2_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
     }
     else if (sa_family == AF_INET6 && len >= sizeof(addr->ipv6_addr))
     {
-        if (!inet_ntop(sa_family, &addr->ipv6_addr.src_addr, proxy_info->src_ip_str, sizeof(ip_str_t))
-         || !inet_ntop(sa_family, &addr->ipv6_addr.dst_addr, proxy_info->dst_ip_str, sizeof(ip_str_t)))
+        if (!inet_ntop(sa_family, &addr->ipv6_addr.src_addr, proxy_info->src_ip_str, sizeof(ip_str_t)))
         {
-            fprintf(stderr, "Invalid v2 PROXY message: inet_ntop() failed for source/destination address: %s", strerror(errno));
-            return false;
+            return ERR_PP2_IPV6_SRC_IP;
         }
-
-        /* Ignore message if it is a health check */
-        if (!memcmp(addr->ipv6_addr.src_addr, addr->ipv6_addr.dst_addr, 16))
+        if (!inet_ntop(sa_family, &addr->ipv6_addr.dst_addr, proxy_info->dst_ip_str, sizeof(ip_str_t)))
         {
-            fprintf(stderr, "v2 PROXY message is just a health check. Ignoring!");
-            return false;
+            return ERR_PP2_IPV6_DST_IP;
         }
 
         proxy_info->src_port = ntohs(addr->ipv6_addr.src_port);
@@ -420,11 +435,13 @@ static bool ppv2_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
         pkt += sizeof(addr->ipv6_addr);
         tlv_vectors_len = len - sizeof(addr->ipv6_addr);
     }
+    else if (sa_family == AF_UNIX && len >= sizeof(addr->unix_addr))
+    {
+        return ERR_PP2_UNSUPPORTED;
+    }
     else
     {
-        fprintf(stderr, "Invalid v2 PROXY message: payload's length is %u bytes instead of at least %u bytes required for IPv%s",
-                len, (uint16_t) (sa_family == AF_INET ? sizeof(addr->ipv4_addr) : sizeof(addr->ipv6_addr)), sa_family == AF_INET ? "4" : "6");
-        return false;
+        return ERR_PP2_LENGTH;
     }
 
     /* TLVs */
@@ -436,22 +453,18 @@ static bool ppv2_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
         uint16_t pp2_tlv_offset = 3 + pp2_tlv_len;
         if (pp2_tlv_offset > tlv_vectors_len)
         {
-            fprintf(stderr, "Invalid v2 PROXY message: TLV vector's %#.2hhx length issue", pp2_tlv->type);
-            return false;
+            return ERR_PP2_TLV_LENGTH;
         }
-        fprintf(stderr, "TLV: Type %#.2hhx - Length %hu", pp2_tlv->type, pp2_tlv_len);
         switch (pp2_tlv->type)
         {
         case PP2_TYPE_ALPN:
         case PP2_TYPE_AUTHORITY:
-            fprintf(stderr, "Ignoring TLV vector %#.2hhx", pp2_tlv->type);
             break;
         case PP2_TYPE_CRC32C:
         {
             if (pp2_tlv_len != sizeof(uint32_t))
             {
-                fprintf(stderr, "Invalid v2 PROXY message: invalid PP2_TYPE_CRC32C TLV. Length is %hu instead of 4", pp2_tlv_len);
-                return false;
+                return ERR_PP2_TYPE_CRC32C;
             }
             uint32_t crc32c_chksum;
             memcpy(&crc32c_chksum, pp2_tlv->value, pp2_tlv_len);
@@ -459,11 +472,10 @@ static bool ppv2_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
 
             memset(pp2_tlv->value, 0, pp2_tlv_len);
             uint32_t crc32c_cacl = crc32c(proxy_msg, sizeof(proxy_hdr_v2_t) + len);
-            fprintf(stderr, "Received CRC32C checksum is %u. Calculated CRC32C checksum is %u", crc32c_chksum, crc32c_cacl);
+            fprintf(stderr, "Received CRC32C checksum is %u. Calculated CRC32C checksum is %u\n", crc32c_chksum, crc32c_cacl);
             if (crc32c_chksum != crc32c_cacl)
             {
-                fprintf(stderr, "Invalid v2 PROXY message: CRC32C checksum is invalid");
-                return false;
+                return ERR_PP2_TYPE_CRC32C;
             }
             break;
         }
@@ -475,14 +487,12 @@ static bool ppv2_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
         case PP2_SUBTYPE_SSL_SIG_ALG:
         case PP2_SUBTYPE_SSL_KEY_ALG:
         case PP2_TYPE_NETNS:
-            fprintf(stderr, "Ignoring TLV vector %#.2hhx", pp2_tlv->type);
             break;
         case PP2_TYPE_AWS:
         {
             if (pp2_tlv_len < sizeof(pp2_tlv_aws_t))
             {
-                fprintf(stderr, "Invalid v2 PROXY message: invalid PP2_TYPE_AWS TLV. Length is %hu which is less than the minimum %zu", pp2_tlv_len, sizeof(pp2_tlv_aws_t));
-                return false;
+                return ERR_PP2_TYPE_AWS;
             }
             pp2_tlv_aws_t *pp2_tlv_aws = (pp2_tlv_aws_t *) pp2_tlv->value;
             if (pp2_tlv_aws->type == PP2_SUBTYPE_AWS_VPCE_ID)
@@ -490,24 +500,23 @@ static bool ppv2_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
                 char *vpce_id = malloc(pp2_tlv_len);
                 memcpy(vpce_id, pp2_tlv_aws->value, pp2_tlv_len - 1);
                 vpce_id[pp2_tlv_len-1] = '\0';
-                fprintf(stderr, "Connection is done through Private Link/Interface VPC endpoint %s", vpce_id);
+                fprintf(stderr, "Connection is done through Private Link/Interface VPC endpoint %s\n", vpce_id);
                 free(vpce_id);
             }
             break;
         }
         default:
-            fprintf(stderr, "Ignoring unknown TLV vector %#.2hhx", pp2_tlv->type);
             break;
         }
         pkt += pp2_tlv_offset; tlv_vectors_len -= pp2_tlv_offset;
     }
 
     fprintf(stderr, "ELB %s:%hu Client %s:%hu\n", proxy_info->dst_ip_str, proxy_info->dst_port, proxy_info->src_ip_str, proxy_info->src_port);
-    return true;
+    return ERR_NULL;
 }
 
 /* Verifies and parses a version 1 PROXY message */
-static bool ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info)
+static int ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info)
 {
     uint32_t pkt_str_length = pktlen + 1;
     /* C-string to work with */
@@ -518,30 +527,26 @@ static bool ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
     char *ptr = strstr(pkt_str, crlf);
     if (!ptr)
     {
-        fprintf(stderr, "Invalid v1 PROXY message: \"\\r\\n\" is missing");
         free(pkt_str);
-        return false;
+        return ERR_PP1_CRLF;
     }
     *ptr = '\0';
-    fprintf(stderr, "v1 PROXY message: %s", pkt_str);
     size_t index = 0;
 
     /* PROXY */
     char *protocol_sig = strtok(pkt_str, " ");
     if (!protocol_sig || strcmp(protocol_sig, "PROXY"))
     {
-        fprintf(stderr, "Invalid v1 PROXY message: \"PROXY\" is missing");
         free(pkt_str);
-        return false;
+        return ERR_PP1_PROXY;
     }
     index += strlen("PROXY");
 
     /* Exactly one space */
     if (pkt[index] != '\x20')
     {
-        fprintf(stderr, "Invalid v1 PROXY message: a space is missing between PROXY and the inet family");
         free(pkt_str);
-        return false;
+        return ERR_PP1_SPACE;
     }
     index++;
 
@@ -549,9 +554,8 @@ static bool ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
     char *inet_family = strtok(NULL, " ");
     if (!inet_family)
     {
-        fprintf(stderr, "Invalid v1 PROXY message: inet protocol/family does not exists");
         free(pkt_str);
-        return false;
+        return ERR_PP1_VERSION_TRANSPORT_FAMILY;
     }
     uint8_t sa_family = AF_UNSPEC;
     if (!strcmp(inet_family, "TCP4"))
@@ -564,24 +568,22 @@ static bool ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
     }
     else if (!(strcmp(inet_family, "UNKNOWN")))
     {
-        fprintf(stderr, "Invalid v1 PROXY message: message indicates the proxied inet family as UNKNOWN");
         free(pkt_str);
-        return false;
+        // set the size
+        return ERR_NULL;
     }
     else
     {
-        fprintf(stderr, "Invalid v1 PROXY message: wrong inet protocol/family: %s", inet_family);
         free(pkt_str);
-        return false;
+        return ERR_PP1_VERSION_TRANSPORT_FAMILY;;
     }
     index += strlen(inet_family);
 
     /* Exactly one space */
     if (pkt[index] != '\x20')
     {
-        fprintf(stderr, "Invalid v1 PROXY message: a space is missing between the inet family and the src_address");
         free(pkt_str);
-        return false;
+        return ERR_PP1_SPACE;
     }
     index++;
 
@@ -590,9 +592,8 @@ static bool ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
     struct in6_addr src_sin_addr;
     if (!src_address || inet_pton(sa_family, src_address, &src_sin_addr) != 1)
     {
-        fprintf(stderr, "Invalid v1 PROXY message: invalid source address %s", src_address);
         free(pkt_str);
-        return false;
+        return sa_family == AF_INET ? ERR_PP1_IPV4_SRC_IP : ERR_PP1_IPV6_SRC_IP;
     }
     memcpy(proxy_info->src_ip_str, src_address, sizeof(proxy_info->src_ip_str));
     index += strlen(src_address);
@@ -600,9 +601,8 @@ static bool ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
     /* Exactly one space */
     if (pkt[index] != '\x20')
     {
-        fprintf(stderr, "Invalid v1 PROXY message: a space is missing between the src_address and the dst_address");
         free(pkt_str);
-        return false;
+        return ERR_PP1_SPACE;
     }
     index++;
 
@@ -611,27 +611,17 @@ static bool ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
     struct in6_addr dst_sin_addr;
     if (!dst_address || inet_pton(sa_family, dst_address, &dst_sin_addr) != 1)
     {
-        fprintf(stderr, "Invalid v1 PROXY message: invalid destination address %s", dst_address);
         free(pkt_str);
-        return false;
+        return sa_family == AF_INET ? ERR_PP1_IPV4_DST_IP : ERR_PP1_IPV6_DST_IP;
     }
     memcpy(proxy_info->dst_ip_str, dst_address, sizeof(proxy_info->dst_ip_str));
     index += strlen(dst_address);
 
-    /* Ignore message if it is a health check */
-    if (!strcmp(src_address, dst_address))
-    {
-        fprintf(stderr, "v1 PROXY message is just a health check. Ignoring!");
-        free(pkt_str);
-        return false;
-    }
-
     /* Exactly one space */
     if (pkt[index] != '\x20')
     {
-        fprintf(stderr, "Invalid v1 PROXY message: a space is missing between the dst_address and the src_port");
         free(pkt_str);
-        return false;
+        return ERR_PP1_SPACE;
     }
     index++;
 
@@ -639,18 +629,16 @@ static bool ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
     char *src_port_str = strtok(NULL, " ");
     if (!src_port_str || !parse_port(src_port_str, &proxy_info->src_port))
     {
-        fprintf(stderr, "Invalid v1 PROXY message: invalid source port number %s", src_port_str);
         free(pkt_str);
-        return false;
+        return ERR_PP1_SRC_PORT;
     }
     index += strlen(src_port_str);
 
     /* Exactly one space */
     if (pkt[index] != '\x20')
     {
-        fprintf(stderr, "Invalid v1 PROXY message: a space is missing between the src_port and the dst_port");
         free(pkt_str);
-        return false;
+        return ERR_PP1_SPACE;
     }
     index++;
 
@@ -658,26 +646,24 @@ static bool ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
     char *dst_port_str = strtok(NULL, " ");
     if (!dst_port_str || !parse_port(dst_port_str, &proxy_info->dst_port))
     {
-        fprintf(stderr, "Invalid v1 PROXY message: invalid destination port number %s", dst_port_str);
         free(pkt_str);
-        return false;
+        return ERR_PP1_DST_PORT;
     }
     index += strlen(dst_port_str);
 
     /* The CRLF sequence */
     if (pkt[index++] != '\r' || pkt[index] != '\n')
     {
-        fprintf(stderr, "Invalid v1 PROXY message: CRLF is not directly after dst_port");
         free(pkt_str);
-        return false;
+        return ERR_PP1_SPACE;
     }
 
-    fprintf(stderr, "ELB %s:%hu Client %s:%hu", proxy_info->dst_ip_str, proxy_info->dst_port, proxy_info->src_ip_str, proxy_info->src_port);
+    fprintf(stderr, "ELB %s:%hu Client %s:%hu\n", proxy_info->dst_ip_str, proxy_info->dst_port, proxy_info->src_ip_str, proxy_info->src_port);
     free(pkt_str);
-    return true;
+    return ERR_NULL;
 }
 
-bool pp_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info)
+int pp_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info)
 {
     if (pktlen > 16 && !memcmp(pkt, "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A\x21", 13))
     {
@@ -689,6 +675,6 @@ bool pp_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info)
     }
     else
     {
-        return 0;
+        return -1;
     }
 }
