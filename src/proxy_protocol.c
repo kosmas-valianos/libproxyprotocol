@@ -1,4 +1,3 @@
-#include <stdint.h>
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
@@ -207,17 +206,14 @@ uint8_t *ppv2_create_message(uint8_t fam, const pp_info_t *proxy_info, uint32_t 
     return pp_msg_v2;
 }
 
-char *ppv1_create_message(uint8_t fam, const pp_info_t *proxy_info)
+char *ppv1_create_message(uint8_t fam, const pp_info_t *proxy_info, uint32_t *pp_msg_v1_len)
 {
     char *inet_family = fam == AF_INET ? "TCP4" : "TCP6";
-    uint32_t pp_msg_v1_len = sizeof(proxy_hdr_v1_t) + strlen(crlf);
-    char *pp_msg_v1 = malloc(pp_msg_v1_len);
-    sprintf(pp_msg_v1, "PROXY %s %s %s %hu %hu",
-        inet_family, proxy_info->src_ip_str, proxy_info->dst_ip_str, proxy_info->src_port, proxy_info->dst_port);
-    memcpy(pp_msg_v1 + sizeof(proxy_hdr_v1_t), crlf, strlen(crlf));
-    char *hex_str_msg = NULL;
-    fprintf(stderr, "Created v1 PROXY message \"%s\"", byte_array_to_hex_str((uint8_t *)pp_msg_v1, pp_msg_v1_len, &hex_str_msg));
-    free(hex_str_msg);
+    *pp_msg_v1_len = sizeof(proxy_hdr_v1_t) + strlen(crlf);
+    char *pp_msg_v1 = malloc(*pp_msg_v1_len);
+    int n = snprintf(pp_msg_v1, *pp_msg_v1_len, "PROXY %s %s %s %hu %hu%s",
+        inet_family, proxy_info->src_ip_str, proxy_info->dst_ip_str, proxy_info->src_port, proxy_info->dst_port, crlf);
+    fprintf(stderr, "Created v1 PROXY message: %.*s\n", n - strlen(crlf), pp_msg_v1);
     return pp_msg_v1;
 }
 
@@ -343,7 +339,7 @@ static bool ppv2_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
      * \x11 : TCP over IPv4
      * \x21 : TCP over IPv6
      */
-    sa_family_t sa_family = AF_UNSPEC;
+    uint8_t sa_family = AF_UNSPEC;
     if (proxy_hdr->fam == '\x11')
     {
         sa_family = AF_INET;
@@ -515,7 +511,7 @@ static bool ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
 {
     uint32_t pkt_str_length = pktlen + 1;
     /* C-string to work with */
-    char pkt_str[pkt_str_length];
+    char *pkt_str = malloc(pkt_str_length);
     memcpy(pkt_str, pkt, pktlen);
     pkt_str[pktlen] = '\0';
 
@@ -523,17 +519,19 @@ static bool ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
     if (!ptr)
     {
         fprintf(stderr, "Invalid v1 PROXY message: \"\\r\\n\" is missing");
+        free(pkt_str);
         return false;
     }
     *ptr = '\0';
     fprintf(stderr, "v1 PROXY message: %s", pkt_str);
-    uint8_t index = 0;
+    size_t index = 0;
 
     /* PROXY */
     char *protocol_sig = strtok(pkt_str, " ");
     if (!protocol_sig || strcmp(protocol_sig, "PROXY"))
     {
         fprintf(stderr, "Invalid v1 PROXY message: \"PROXY\" is missing");
+        free(pkt_str);
         return false;
     }
     index += strlen("PROXY");
@@ -542,6 +540,7 @@ static bool ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
     if (pkt[index] != '\x20')
     {
         fprintf(stderr, "Invalid v1 PROXY message: a space is missing between PROXY and the inet family");
+        free(pkt_str);
         return false;
     }
     index++;
@@ -551,9 +550,10 @@ static bool ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
     if (!inet_family)
     {
         fprintf(stderr, "Invalid v1 PROXY message: inet protocol/family does not exists");
+        free(pkt_str);
         return false;
     }
-    sa_family_t sa_family = AF_UNSPEC;
+    uint8_t sa_family = AF_UNSPEC;
     if (!strcmp(inet_family, "TCP4"))
     {
         sa_family = AF_INET;
@@ -565,11 +565,13 @@ static bool ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
     else if (!(strcmp(inet_family, "UNKNOWN")))
     {
         fprintf(stderr, "Invalid v1 PROXY message: message indicates the proxied inet family as UNKNOWN");
+        free(pkt_str);
         return false;
     }
     else
     {
         fprintf(stderr, "Invalid v1 PROXY message: wrong inet protocol/family: %s", inet_family);
+        free(pkt_str);
         return false;
     }
     index += strlen(inet_family);
@@ -578,6 +580,7 @@ static bool ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
     if (pkt[index] != '\x20')
     {
         fprintf(stderr, "Invalid v1 PROXY message: a space is missing between the inet family and the src_address");
+        free(pkt_str);
         return false;
     }
     index++;
@@ -588,6 +591,7 @@ static bool ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
     if (!src_address || inet_pton(sa_family, src_address, &src_sin_addr) != 1)
     {
         fprintf(stderr, "Invalid v1 PROXY message: invalid source address %s", src_address);
+        free(pkt_str);
         return false;
     }
     memcpy(proxy_info->src_ip_str, src_address, sizeof(proxy_info->src_ip_str));
@@ -597,6 +601,7 @@ static bool ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
     if (pkt[index] != '\x20')
     {
         fprintf(stderr, "Invalid v1 PROXY message: a space is missing between the src_address and the dst_address");
+        free(pkt_str);
         return false;
     }
     index++;
@@ -607,6 +612,7 @@ static bool ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
     if (!dst_address || inet_pton(sa_family, dst_address, &dst_sin_addr) != 1)
     {
         fprintf(stderr, "Invalid v1 PROXY message: invalid destination address %s", dst_address);
+        free(pkt_str);
         return false;
     }
     memcpy(proxy_info->dst_ip_str, dst_address, sizeof(proxy_info->dst_ip_str));
@@ -616,6 +622,7 @@ static bool ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
     if (!strcmp(src_address, dst_address))
     {
         fprintf(stderr, "v1 PROXY message is just a health check. Ignoring!");
+        free(pkt_str);
         return false;
     }
 
@@ -623,6 +630,7 @@ static bool ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
     if (pkt[index] != '\x20')
     {
         fprintf(stderr, "Invalid v1 PROXY message: a space is missing between the dst_address and the src_port");
+        free(pkt_str);
         return false;
     }
     index++;
@@ -632,6 +640,7 @@ static bool ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
     if (!src_port_str || !parse_port(src_port_str, &proxy_info->src_port))
     {
         fprintf(stderr, "Invalid v1 PROXY message: invalid source port number %s", src_port_str);
+        free(pkt_str);
         return false;
     }
     index += strlen(src_port_str);
@@ -640,6 +649,7 @@ static bool ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
     if (pkt[index] != '\x20')
     {
         fprintf(stderr, "Invalid v1 PROXY message: a space is missing between the src_port and the dst_port");
+        free(pkt_str);
         return false;
     }
     index++;
@@ -649,6 +659,7 @@ static bool ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
     if (!dst_port_str || !parse_port(dst_port_str, &proxy_info->dst_port))
     {
         fprintf(stderr, "Invalid v1 PROXY message: invalid destination port number %s", dst_port_str);
+        free(pkt_str);
         return false;
     }
     index += strlen(dst_port_str);
@@ -657,10 +668,12 @@ static bool ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_inf
     if (pkt[index++] != '\r' || pkt[index] != '\n')
     {
         fprintf(stderr, "Invalid v1 PROXY message: CRLF is not directly after dst_port");
+        free(pkt_str);
         return false;
     }
 
     fprintf(stderr, "ELB %s:%hu Client %s:%hu", proxy_info->dst_ip_str, proxy_info->dst_port, proxy_info->src_ip_str, proxy_info->src_port);
+    free(pkt_str);
     return true;
 }
 
