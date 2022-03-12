@@ -181,7 +181,7 @@ static bool parse_port(const char *value, uint16_t *usport)
     return true;
 }
 
-uint8_t *ppv2_create_message(uint8_t fam, const pp_info_t *proxy_info, uint32_t *pp_msg_v2_len, int *error)
+uint8_t *ppv2_create_message(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp_msg_v2_len, int *error)
 {
     typedef struct
     {
@@ -199,33 +199,33 @@ uint8_t *ppv2_create_message(uint8_t fam, const pp_info_t *proxy_info, uint32_t 
 
     if (fam == AF_INET)
     {
-        if (inet_pton(AF_INET, proxy_info->src_ip_str, &msg.proxy_addr.ipv4_addr.src_addr) != 1)
+        if (inet_pton(AF_INET, pp_info->src_ip_str, &msg.proxy_addr.ipv4_addr.src_addr) != 1)
         {
             *error = ERR_PP2_IPV4_SRC_IP;
             return NULL;
         }
-        if (inet_pton(AF_INET, proxy_info->dst_ip_str, &msg.proxy_addr.ipv4_addr.dst_addr) != 1)
+        if (inet_pton(AF_INET, pp_info->dst_ip_str, &msg.proxy_addr.ipv4_addr.dst_addr) != 1)
         {
             *error = ERR_PP2_IPV4_DST_IP;
             return NULL;
         }
-        msg.proxy_addr.ipv4_addr.src_port = htons(proxy_info->src_port);
-        msg.proxy_addr.ipv4_addr.dst_port = htons(proxy_info->dst_port);
+        msg.proxy_addr.ipv4_addr.src_port = htons(pp_info->src_port);
+        msg.proxy_addr.ipv4_addr.dst_port = htons(pp_info->dst_port);
     }
     else if (fam == AF_INET6)
     {
-        if (inet_pton(AF_INET6, proxy_info->src_ip_str, &msg.proxy_addr.ipv6_addr.src_addr) != 1)
+        if (inet_pton(AF_INET6, pp_info->src_ip_str, &msg.proxy_addr.ipv6_addr.src_addr) != 1)
         {
             *error = ERR_PP2_IPV6_SRC_IP;
             return NULL;
         }
-        if (inet_pton(AF_INET6, proxy_info->dst_ip_str, &msg.proxy_addr.ipv6_addr.dst_addr) != 1)
+        if (inet_pton(AF_INET6, pp_info->dst_ip_str, &msg.proxy_addr.ipv6_addr.dst_addr) != 1)
         {
             *error = ERR_PP2_IPV6_DST_IP;
             return NULL;
         }
-        msg.proxy_addr.ipv6_addr.src_port = htons(proxy_info->src_port);
-        msg.proxy_addr.ipv6_addr.dst_port = htons(proxy_info->dst_port);
+        msg.proxy_addr.ipv6_addr.src_port = htons(pp_info->src_port);
+        msg.proxy_addr.ipv6_addr.dst_port = htons(pp_info->dst_port);
     }
 
     /* Serialize the msg */
@@ -238,11 +238,11 @@ uint8_t *ppv2_create_message(uint8_t fam, const pp_info_t *proxy_info, uint32_t 
     return pp_msg_v2;
 }
 
-char *ppv1_create_message(uint8_t fam, const pp_info_t *proxy_info, uint32_t *pp_msg_v1_len, int *error)
+char *ppv1_create_message(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp_msg_v1_len, int *error)
 {
     char block[PP1_MAX_LENGHT];
     *pp_msg_v1_len = snprintf(block, sizeof(block), "PROXY %s %s %s %hu %hu%s",
-        fam == AF_INET ? "TCP4" : "TCP6", proxy_info->src_ip_str, proxy_info->dst_ip_str, proxy_info->src_port, proxy_info->dst_port, crlf);
+        fam == AF_INET ? "TCP4" : "TCP6", pp_info->src_ip_str, pp_info->dst_ip_str, pp_info->src_port, pp_info->dst_port, crlf);
     char *pp_msg_v1 = malloc(*pp_msg_v1_len);
     memcpy(pp_msg_v1, block, *pp_msg_v1_len);
     fprintf(stderr, "v1 PROXY message: %.*s\n", *pp_msg_v1_len-2, pp_msg_v1);
@@ -337,7 +337,7 @@ static uint32_t crctable[256] = {
  0xBE2DA0A5L, 0x4C4623A6L, 0x5F16D052L, 0xAD7D5351L
 };
 
-static uint32_t crc32c(uint8_t *buf, uint32_t len)
+static uint32_t crc32c(const uint8_t *buf, uint32_t len)
 {
     uint32_t crc = 0xffffffff;
     while (len-- > 0)
@@ -348,10 +348,10 @@ static uint32_t crc32c(uint8_t *buf, uint32_t len)
 }
 
 /* Verifies and parses a version 2 PROXY message */
-static int ppv2_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info)
+static int ppv2_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
 {
-    uint8_t *proxy_msg = (uint8_t *) pkt;
-    proxy_hdr_v2_t *proxy_hdr = (proxy_hdr_v2_t *) pkt;
+    const uint8_t *proxy_msg = pkt;
+    const proxy_hdr_v2_t *proxy_hdr = (proxy_hdr_v2_t *) pkt;
 
     /* Constant 12 bytes block containing the protocol signature */
     if (memcmp(proxy_hdr->sig, "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A", sizeof(proxy_hdr->sig)))
@@ -405,34 +405,34 @@ static int ppv2_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info
     uint16_t tlv_vectors_len = 0;
     if (sa_family == AF_INET && len >= sizeof(addr->ipv4_addr))
     {
-        if (!inet_ntop(sa_family, &addr->ipv4_addr.src_addr, proxy_info->src_ip_str, sizeof(ip_str_t)))
+        if (!inet_ntop(sa_family, &addr->ipv4_addr.src_addr, pp_info->src_ip_str, sizeof(ip_str_t)))
         {
             return ERR_PP2_IPV4_SRC_IP;
         }
-        if (!inet_ntop(sa_family, &addr->ipv4_addr.dst_addr, proxy_info->dst_ip_str, sizeof(ip_str_t)))
+        if (!inet_ntop(sa_family, &addr->ipv4_addr.dst_addr, pp_info->dst_ip_str, sizeof(ip_str_t)))
         {
             return ERR_PP2_IPV4_DST_IP;
         }
 
-        proxy_info->src_port = ntohs(addr->ipv4_addr.src_port);
-        proxy_info->dst_port = ntohs(addr->ipv4_addr.dst_port);
+        pp_info->src_port = ntohs(addr->ipv4_addr.src_port);
+        pp_info->dst_port = ntohs(addr->ipv4_addr.dst_port);
 
         pkt += sizeof(addr->ipv4_addr);
         tlv_vectors_len = len - sizeof(addr->ipv4_addr);
     }
     else if (sa_family == AF_INET6 && len >= sizeof(addr->ipv6_addr))
     {
-        if (!inet_ntop(sa_family, &addr->ipv6_addr.src_addr, proxy_info->src_ip_str, sizeof(ip_str_t)))
+        if (!inet_ntop(sa_family, &addr->ipv6_addr.src_addr, pp_info->src_ip_str, sizeof(ip_str_t)))
         {
             return ERR_PP2_IPV6_SRC_IP;
         }
-        if (!inet_ntop(sa_family, &addr->ipv6_addr.dst_addr, proxy_info->dst_ip_str, sizeof(ip_str_t)))
+        if (!inet_ntop(sa_family, &addr->ipv6_addr.dst_addr, pp_info->dst_ip_str, sizeof(ip_str_t)))
         {
             return ERR_PP2_IPV6_DST_IP;
         }
 
-        proxy_info->src_port = ntohs(addr->ipv6_addr.src_port);
-        proxy_info->dst_port = ntohs(addr->ipv6_addr.dst_port);
+        pp_info->src_port = ntohs(addr->ipv6_addr.src_port);
+        pp_info->dst_port = ntohs(addr->ipv6_addr.dst_port);
 
         pkt += sizeof(addr->ipv6_addr);
         tlv_vectors_len = len - sizeof(addr->ipv6_addr);
@@ -513,18 +513,18 @@ static int ppv2_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info
         pkt += pp2_tlv_offset; tlv_vectors_len -= pp2_tlv_offset;
     }
 
-    fprintf(stderr, "ELB %s:%hu Client %s:%hu\n", proxy_info->dst_ip_str, proxy_info->dst_port, proxy_info->src_ip_str, proxy_info->src_port);
-    return ERR_NULL;
+    fprintf(stderr, "ELB %s:%hu Client %s:%hu\n", pp_info->dst_ip_str, pp_info->dst_port, pp_info->src_ip_str, pp_info->src_port);
+    return sizeof(proxy_hdr_v2_t) + len;
 }
 
 /* Verifies and parses a version 1 PROXY message */
-static int ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info)
+static int ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
 {
     char block[PP1_MAX_LENGHT] = { 0 };
     char *ptr = block;
     int length = 0;
     memcpy(block, pkt, pktlen < PP1_MAX_LENGHT ? pktlen : PP1_MAX_LENGHT);
-    memset(proxy_info, 0, sizeof(*proxy_info));
+    memset(pp_info, 0, sizeof(*pp_info));
 
     char *block_end = strstr(block, crlf);
     if (!block_end)
@@ -594,9 +594,9 @@ static int ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info
         return sa_family == AF_INET ? ERR_PP1_IPV4_SRC_IP : ERR_PP1_IPV6_SRC_IP;
     }
     uint16_t src_address_length = src_address_end - ptr;
-    memcpy(proxy_info->src_ip_str, ptr, src_address_length);
+    memcpy(pp_info->src_ip_str, ptr, src_address_length);
     struct in6_addr src_sin_addr;
-    if (inet_pton(sa_family, proxy_info->src_ip_str, &src_sin_addr) != 1)
+    if (inet_pton(sa_family, pp_info->src_ip_str, &src_sin_addr) != 1)
     {
         return sa_family == AF_INET ? ERR_PP1_IPV4_SRC_IP : ERR_PP1_IPV6_SRC_IP;
     }
@@ -616,9 +616,9 @@ static int ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info
         return sa_family == AF_INET ? ERR_PP1_IPV4_DST_IP : ERR_PP1_IPV6_DST_IP;
     }
     uint16_t dst_address_length = dst_address_end - ptr;
-    memcpy(proxy_info->dst_ip_str, ptr, dst_address_length);
+    memcpy(pp_info->dst_ip_str, ptr, dst_address_length);
     struct in6_addr dst_sin_addr;
-    if (inet_pton(sa_family, proxy_info->dst_ip_str, &dst_sin_addr) != 1)
+    if (inet_pton(sa_family, pp_info->dst_ip_str, &dst_sin_addr) != 1)
     {
         return sa_family == AF_INET ? ERR_PP1_IPV4_DST_IP : ERR_PP1_IPV6_DST_IP;
     }
@@ -640,12 +640,12 @@ static int ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info
     char src_port_str[6] = { 0 };
     uint16_t src_port_length = src_port_end - ptr;
     memcpy(src_port_str, ptr, src_port_length);
-    if (!parse_port(src_port_str, &proxy_info->src_port))
+    if (!parse_port(src_port_str, &pp_info->src_port))
     {
         return ERR_PP1_SRC_PORT;
     }
     ptr += src_port_length;
-    printf("here1 with %d\n", proxy_info->src_port);
+    printf("here1 with %d\n", pp_info->src_port);
 
     /* Exactly one space */
     if (*ptr != '\x20')
@@ -663,7 +663,7 @@ static int ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info
     char dst_port_str[6] = { 0 };
     uint16_t dst_port_length = dst_port_end - ptr;
     memcpy(dst_port_str, ptr, dst_port_length);
-    if (!parse_port(dst_port_str, &proxy_info->dst_port))
+    if (!parse_port(dst_port_str, &pp_info->dst_port))
     {
         return ERR_PP1_DST_PORT;
     }
@@ -675,19 +675,19 @@ static int ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info
         return ERR_PP1_CRLF;
     }
 
-    fprintf(stderr, "ELB %s:%hu Client %s:%hu\n", proxy_info->dst_ip_str, proxy_info->dst_port, proxy_info->src_ip_str, proxy_info->src_port);
+    fprintf(stderr, "ELB %s:%hu Client %s:%hu\n", pp_info->dst_ip_str, pp_info->dst_port, pp_info->src_ip_str, pp_info->src_port);
     return length;
 }
 
-int pp_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info)
+int pp_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
 {
     if (pktlen > 16 && !memcmp(pkt, "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A\x21", 13))
     {
-        return ppv2_parse(pkt, pktlen, proxy_info);
+        return ppv2_parse(pkt, pktlen, pp_info);
     }
     else if (pktlen > 8 && !memcmp(pkt, "\x50\x52\x4F\x58\x59", 5))
     {
-        return ppv1_parse(pkt, pktlen, proxy_info);;
+        return ppv1_parse(pkt, pktlen, pp_info);;
     }
     else
     {
