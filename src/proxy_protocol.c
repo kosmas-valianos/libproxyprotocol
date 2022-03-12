@@ -245,6 +245,7 @@ char *ppv1_create_message(uint8_t fam, const pp_info_t *proxy_info, uint32_t *pp
         fam == AF_INET ? "TCP4" : "TCP6", proxy_info->src_ip_str, proxy_info->dst_ip_str, proxy_info->src_port, proxy_info->dst_port, crlf);
     char *pp_msg_v1 = malloc(*pp_msg_v1_len);
     memcpy(pp_msg_v1, block, *pp_msg_v1_len);
+    fprintf(stderr, "v1 PROXY message: %.*s\n", *pp_msg_v1_len-2, pp_msg_v1);
     *error = ERR_NULL;
     return pp_msg_v1;
 }
@@ -518,148 +519,153 @@ static int ppv2_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info
 /* Verifies and parses a version 1 PROXY message */
 static int ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info)
 {
-    uint32_t pkt_str_length = pktlen + 1;
-    /* C-string to work with */
-    char *pkt_str = malloc(pkt_str_length);
-    memcpy(pkt_str, pkt, pktlen);
-    pkt_str[pktlen] = '\0';
+    char block[PP1_MAX_LENGHT] = { 0 };
+    char *ptr = block;
+    memcpy(block, pkt, pktlen < PP1_MAX_LENGHT ? pktlen : PP1_MAX_LENGHT);
 
-    char *ptr = strstr(pkt_str, crlf);
-    if (!ptr)
+    if (!strstr(block, crlf))
     {
-        free(pkt_str);
         return ERR_PP1_CRLF;
     }
-    *ptr = '\0';
-    size_t index = 0;
 
     /* PROXY */
-    char *protocol_sig = strtok(pkt_str, " ");
-    if (!protocol_sig || strcmp(protocol_sig, "PROXY"))
+    if (memcmp(block, "PROXY", 5))
     {
-        free(pkt_str);
         return ERR_PP1_PROXY;
     }
-    index += strlen("PROXY");
+    ptr += 5;
 
     /* Exactly one space */
-    if (pkt[index] != '\x20')
+    if (*ptr != '\x20')
     {
-        free(pkt_str);
         return ERR_PP1_SPACE;
     }
-    index++;
+    ptr++;
 
     /* String indicating the proxied INET protocol and family */
-    char *inet_family = strtok(NULL, " ");
+    char *inet_family = strchr(ptr, ' ');
     if (!inet_family)
     {
-        free(pkt_str);
         return ERR_PP1_VERSION_TRANSPORT_FAMILY;
     }
     uint8_t sa_family = AF_UNSPEC;
-    if (!strcmp(inet_family, "TCP4"))
+    if (!memcmp(ptr, "TCP4", 4))
     {
         sa_family = AF_INET;
+        ptr += 4;
     }
-    else if (!(strcmp(inet_family, "TCP6")))
+    else if (!memcmp(ptr, "TCP6", 4))
     {
         sa_family = AF_INET6;
+        ptr += 4;
     }
-    else if (!(strcmp(inet_family, "UNKNOWN")))
+    else if (!memcmp(ptr, "UNKNOWN", 7))
     {
-        free(pkt_str);
+        ptr += 7;
         // set the size
         return ERR_NULL;
     }
     else
     {
-        free(pkt_str);
         return ERR_PP1_VERSION_TRANSPORT_FAMILY;;
     }
-    index += strlen(inet_family);
 
     /* Exactly one space */
-    if (pkt[index] != '\x20')
+    if (*ptr != '\x20')
     {
-        free(pkt_str);
         return ERR_PP1_SPACE;
     }
-    index++;
+    ptr++;
 
     /* Source address */
-    char *src_address = strtok(NULL, " ");
-    struct in6_addr src_sin_addr;
-    if (!src_address || inet_pton(sa_family, src_address, &src_sin_addr) != 1)
+    char *src_address_end = strchr(ptr, ' ');
+    if (!src_address_end)
     {
-        free(pkt_str);
         return sa_family == AF_INET ? ERR_PP1_IPV4_SRC_IP : ERR_PP1_IPV6_SRC_IP;
     }
-    memcpy(proxy_info->src_ip_str, src_address, sizeof(proxy_info->src_ip_str));
-    index += strlen(src_address);
+    uint16_t src_address_length = src_address_end - ptr;
+    memcpy(proxy_info->src_ip_str, ptr, src_address_length);
+    struct in6_addr src_sin_addr;
+    if (inet_pton(sa_family, proxy_info->src_ip_str, &src_sin_addr) != 1)
+    {
+        return sa_family == AF_INET ? ERR_PP1_IPV4_SRC_IP : ERR_PP1_IPV6_SRC_IP;
+    }
+    ptr += src_address_length;
 
     /* Exactly one space */
-    if (pkt[index] != '\x20')
+    if (*ptr != '\x20')
     {
-        free(pkt_str);
         return ERR_PP1_SPACE;
     }
-    index++;
+    ptr++;
 
     /* Destination address */
-    char *dst_address = strtok(NULL, " ");
-    struct in6_addr dst_sin_addr;
-    if (!dst_address || inet_pton(sa_family, dst_address, &dst_sin_addr) != 1)
+    char *dst_address_end = strchr(ptr, ' ');
+    if (!dst_address_end)
     {
-        free(pkt_str);
         return sa_family == AF_INET ? ERR_PP1_IPV4_DST_IP : ERR_PP1_IPV6_DST_IP;
     }
-    memcpy(proxy_info->dst_ip_str, dst_address, sizeof(proxy_info->dst_ip_str));
-    index += strlen(dst_address);
+    uint16_t dst_address_length = dst_address_end - ptr;
+    memcpy(proxy_info->dst_ip_str, ptr, dst_address_length);
+    struct in6_addr dst_sin_addr;
+    if (inet_pton(sa_family, proxy_info->dst_ip_str, &dst_sin_addr) != 1)
+    {
+        return sa_family == AF_INET ? ERR_PP1_IPV4_DST_IP : ERR_PP1_IPV6_DST_IP;
+    }
+    ptr += dst_address_length;
 
     /* Exactly one space */
-    if (pkt[index] != '\x20')
+    if (*ptr != '\x20')
     {
-        free(pkt_str);
         return ERR_PP1_SPACE;
     }
-    index++;
+    ptr++;
 
     /* TCP source port represented as a decimal integer in the range [0..65535] inclusive */
-    char *src_port_str = strtok(NULL, " ");
-    if (!src_port_str || !parse_port(src_port_str, &proxy_info->src_port))
+    char *src_port_end = strchr(ptr, ' ');
+    if (!src_port_end)
     {
-        free(pkt_str);
         return ERR_PP1_SRC_PORT;
     }
-    index += strlen(src_port_str);
+    char src_port_str[6] = { 0 };
+    uint16_t src_port_length = src_port_end - ptr;
+    memcpy(src_port_str, ptr, src_port_length);
+    if (!parse_port(src_port_str, &proxy_info->src_port))
+    {
+        return ERR_PP1_SRC_PORT;
+    }
+    ptr += src_port_length;
+    printf("here1 with %d\n", proxy_info->src_port);
 
     /* Exactly one space */
-    if (pkt[index] != '\x20')
+    if (*ptr != '\x20')
     {
-        free(pkt_str);
         return ERR_PP1_SPACE;
     }
-    index++;
+    ptr++;
 
     /* TCP destination port represented as a decimal integer in the range [0..65535] inclusive */
-    char *dst_port_str = strtok(NULL, " ");
-    if (!dst_port_str || !parse_port(dst_port_str, &proxy_info->dst_port))
+    char *dst_port_end = strchr(ptr, '\r');
+    if (!dst_port_end)
     {
-        free(pkt_str);
         return ERR_PP1_DST_PORT;
     }
-    index += strlen(dst_port_str);
+    char dst_port_str[6] = { 0 };
+    uint16_t dst_port_length = dst_port_end - ptr;
+    memcpy(dst_port_str, ptr, dst_port_length);
+    if (!parse_port(dst_port_str, &proxy_info->dst_port))
+    {
+        return ERR_PP1_DST_PORT;
+    }
+    ptr += dst_port_length;
 
     /* The CRLF sequence */
-    if (pkt[index++] != '\r' || pkt[index] != '\n')
+    if (*ptr != '\r' || *(ptr+1) != '\n')
     {
-        free(pkt_str);
-        return ERR_PP1_SPACE;
+        return ERR_PP1_CRLF;
     }
 
     fprintf(stderr, "ELB %s:%hu Client %s:%hu\n", proxy_info->dst_ip_str, proxy_info->dst_port, proxy_info->src_ip_str, proxy_info->src_port);
-    free(pkt_str);
     return ERR_NULL;
 }
 
