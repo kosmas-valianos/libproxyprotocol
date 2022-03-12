@@ -4,14 +4,48 @@
 
 typedef struct
 {
-    const char *name;
-    int         error_expected;
-    pp_info_t   pp_info_in;
-    pp_info_t   pp_info_out_expected;
+    const char    *name;
+    pp_info_t      pp_info_in;
+    const uint8_t *raw_bytes_in;
+    int            rc_expected;
+    pp_info_t      pp_info_out_expected;
 } test_t;
 
 int main(int argc, char **argv)
 {
+    // Define tests
+    test_t tests[] = {
+        {
+            .name = "v1 PROXY message: UNKNOWN - short",
+            .raw_bytes_in = "PROXY UNKNOWN\r\n",
+            .rc_expected = 15,
+        },
+        {
+            .name = "v1 PROXY message: UNKNOWN - full",
+            .raw_bytes_in = "PROXY UNKNOWN ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff 65535 65535\r\n",
+            .rc_expected = 107,
+        },
+    };
+
+    // Run tests
+    uint32_t i;
+    for (i = 0; i < 2; i++)
+    {
+        printf("Running test: %s\n", tests[i].name);
+        if (tests[i].raw_bytes_in)
+        {
+            pp_info_t ppv1_info_out = { 0 };
+            int rc = pp_parse(tests[i].raw_bytes_in, strlen(tests[i].raw_bytes_in), &ppv1_info_out);
+            if (rc != tests[i].rc_expected || memcmp(&ppv1_info_out, &tests[i].pp_info_out_expected, sizeof(pp_info_t)))
+            {
+                return EXIT_FAILURE;
+            }
+        }
+    }
+    printf("ALl tests completed successfully\n");
+    return EXIT_SUCCESS;
+
+    /*
     int error, rc;
     pp_info_t pp_info_in = {
         .dst_ip_str = "172.22.32.1",
@@ -48,4 +82,5 @@ int main(int argc, char **argv)
     }
     getchar();
     return EXIT_SUCCESS;
+    */
 }
