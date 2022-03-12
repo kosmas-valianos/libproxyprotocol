@@ -521,12 +521,17 @@ static int ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info
 {
     char block[PP1_MAX_LENGHT] = { 0 };
     char *ptr = block;
+    int length = 0;
     memcpy(block, pkt, pktlen < PP1_MAX_LENGHT ? pktlen : PP1_MAX_LENGHT);
+    memset(proxy_info, 0, sizeof(*proxy_info));
 
-    if (!strstr(block, crlf))
+    char *block_end = strstr(block, crlf);
+    if (!block_end)
     {
         return ERR_PP1_CRLF;
     }
+    block_end += strlen(crlf);
+    length = block_end - block;
 
     /* PROXY */
     if (memcmp(block, "PROXY", 5))
@@ -546,6 +551,11 @@ static int ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info
     char *inet_family = strchr(ptr, ' ');
     if (!inet_family)
     {
+        /* Unknown connection (short form) */
+        if (pktlen == 15 || !memcmp(ptr, "UNKNOWN", 7))
+        {
+            return length;
+        }
         return ERR_PP1_VERSION_TRANSPORT_FAMILY;
     }
     uint8_t sa_family = AF_UNSPEC;
@@ -561,9 +571,8 @@ static int ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info
     }
     else if (!memcmp(ptr, "UNKNOWN", 7))
     {
-        ptr += 7;
-        // set the size
-        return ERR_NULL;
+        /* The receiver must ignore anything presented before the CRLF is found */
+        return length;
     }
     else
     {
@@ -666,7 +675,7 @@ static int ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info
     }
 
     fprintf(stderr, "ELB %s:%hu Client %s:%hu\n", proxy_info->dst_ip_str, proxy_info->dst_port, proxy_info->src_ip_str, proxy_info->src_port);
-    return ERR_NULL;
+    return length;
 }
 
 int pp_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info)

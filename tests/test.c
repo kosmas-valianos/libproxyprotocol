@@ -30,6 +30,12 @@ int main(int argc, char **argv)
     fprintf(stderr, "rc is %d\n", rc);
     rc = pp_parse(pp_msg_v1, pp_msg_v1_len, &ppv1_info_out);
     fprintf(stderr, "rc is %d\n", rc);
+    const char *v1_unknown = "PROXY UNKNOWN\r\n";
+    const char* v1_unknown1 = "PROXY UNKNOWN ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff 65535 65535\r\n";
+    rc = pp_parse(v1_unknown, strlen(v1_unknown), &ppv1_info_out);
+    fprintf(stderr, "rc unknown is %d. strlen is %d\n", rc, strlen(v1_unknown));
+    rc = pp_parse(v1_unknown1, strlen(v1_unknown1), &ppv1_info_out);
+    fprintf(stderr, "rc unknown1 is %d. strlen is %d\n", rc, strlen(v1_unknown1));
     if (memcmp(&pp_info_in, &ppv2_info_out, sizeof(ppv2_info_out)))
     {
         getchar();
