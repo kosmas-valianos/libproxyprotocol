@@ -121,7 +121,7 @@ enum
     ERR_NULL,
     ERR_PP2_SIG,
     ERR_PP2_VERSION_CMD,
-    ERR_PP2_VERSION_TRANSPORT_FAMILY,
+    ERR_PP2_TRANSPORT_FAMILY,
     ERR_PP2_LENGTH,
     ERR_PP2_IPV4_SRC_IP,
     ERR_PP2_IPV4_DST_IP,
@@ -134,7 +134,7 @@ enum
     ERR_PP1_CRLF,
     ERR_PP1_PROXY,
     ERR_PP1_SPACE,
-    ERR_PP1_VERSION_TRANSPORT_FAMILY,
+    ERR_PP1_TRANSPORT_FAMILY,
     ERR_PP1_IPV4_SRC_IP,
     ERR_PP1_IPV4_DST_IP,
     ERR_PP1_IPV6_SRC_IP,
@@ -360,6 +360,7 @@ static int ppv2_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info
     }
 
     /* The next byte (the 13th one) is the protocol version and command */
+    /* TODO fix if 0x20 is local*/
     if (proxy_hdr->ver_cmd != 0x21)
     {
         return ERR_PP2_VERSION_CMD;
@@ -381,7 +382,7 @@ static int ppv2_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info
     }
     else
     {
-        return ERR_PP2_VERSION_TRANSPORT_FAMILY;
+        return ERR_PP2_TRANSPORT_FAMILY;
     }
 
     /* The 15th and 16th bytes is the address length in bytes in network byte order */
@@ -556,7 +557,7 @@ static int ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info
         {
             return length;
         }
-        return ERR_PP1_VERSION_TRANSPORT_FAMILY;
+        return ERR_PP1_TRANSPORT_FAMILY;
     }
     uint8_t sa_family = AF_UNSPEC;
     if (!memcmp(ptr, "TCP4", 4))
@@ -576,7 +577,7 @@ static int ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info
     }
     else
     {
-        return ERR_PP1_VERSION_TRANSPORT_FAMILY;;
+        return ERR_PP1_TRANSPORT_FAMILY;;
     }
 
     /* Exactly one space */
