@@ -99,8 +99,7 @@ enum
     ERR_PP_VERSION,
     ERR_PP2_SIG,
     ERR_PP2_VERSION,
-    /* TODO */
-    ERR_PP2_VERSION_CMD,
+    ERR_PP2_CMD,
     ERR_PP2_TRANSPORT_FAMILY,
     ERR_PP2_LENGTH,
     ERR_PP2_IPV4_SRC_IP,
@@ -128,7 +127,7 @@ static const char *errors[] = {
     "Invalind PROXY protocol version given. Only 1 and 2 are valid",
     "Invalid v2 PROXY message: wrong protocol signature",
     "Invalid v2 PROXY message: wrong protocol version",
-    "Invalid v2 PROXY message: wrong protocol version or command: Only 0x21 is accepted",
+    "Invalid v2 PROXY message: wrong command",
     "Invalid v2 PROXY message: wrong transport protocol or address family",
     "Invalid v2 PROXY message: length",
     "Invalid v2 PROXY message: invalid IPv4 src IP",
@@ -434,25 +433,48 @@ static int ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
     }
 
     /* The next byte (the 13th one) is the protocol version and command */
-    /* TODO fix if 0x20 is local*/
-    if (proxy_hdr->ver_cmd != 0x21)
+    /* The highest four bits contains the version. Only \x2 is accepted */
+    uint8_t version = proxy_hdr->ver_cmd >> 4;
+    if (version != 0x2)
     {
-        return ERR_PP2_VERSION_CMD;
+        return ERR_PP2_VERSION;
+    }
+    /* The lowest four bits represents the command
+     * \x0 : LOCAL
+     * \x1 : PROXY
+     */
+    uint8_t cmd = proxy_hdr->ver_cmd & 0x0f;
+    if (cmd != 0x0 && cmd != 0x1)
+    {
+        return ERR_PP2_CMD;
     }
 
     /*
      * The 14th byte contains the transport protocol and address family
+     * \x00 : UNSPEC
      * \x11 : TCP over IPv4
+     * \x12 : UDP over IPv4
      * \x21 : TCP over IPv6
+     * \x22 : UDP over IPv6
+     * \x31 : UNIX stream
+     * \x32 : UNIX datagram
      */
-    uint8_t sa_family = AF_UNSPEC;
-    if (proxy_hdr->fam == '\x11')
+    uint8_t fam;
+    if (proxy_hdr->fam == '\x00' || cmd == 0x0)
     {
-        sa_family = AF_INET;
+        fam = AF_UNSPEC;
     }
-    else if (proxy_hdr->fam == '\x21')
+    else if (proxy_hdr->fam == '\x11' || proxy_hdr->fam == '\x12')
     {
-        sa_family = AF_INET6;
+        fam = AF_INET;
+    }
+    else if (proxy_hdr->fam == '\x21' || proxy_hdr->fam == '\x22')
+    {
+        fam = AF_INET6;
+    }
+    else if (proxy_hdr->fam == '\x31' || proxy_hdr->fam == '\x32')
+    {
+        fam = AF_UNIX;
     }
     else
     {
@@ -475,15 +497,19 @@ static int ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
      * - destination layer 4 address if any, in network byte order (port)
      */
     pkt += sizeof(proxy_hdr_v2_t);
-    const proxy_addr_t *addr = (proxy_addr_t *) pkt;
+    proxy_addr_t *addr = (proxy_addr_t *) pkt;
     uint16_t tlv_vectors_len = 0;
-    if (sa_family == AF_INET && len >= sizeof(addr->ipv4_addr))
+    if (fam == AF_UNSPEC)
     {
-        if (!inet_ntop(sa_family, &addr->ipv4_addr.src_addr, pp_info->src_ip_str, sizeof(ip_str_t)))
+        tlv_vectors_len = len;
+    }
+    else if (fam == AF_INET && len >= sizeof(addr->ipv4_addr))
+    {
+        if (!inet_ntop(fam, &addr->ipv4_addr.src_addr, pp_info->src_ip_str, sizeof(ip_str_t)))
         {
             return ERR_PP2_IPV4_SRC_IP;
         }
-        if (!inet_ntop(sa_family, &addr->ipv4_addr.dst_addr, pp_info->dst_ip_str, sizeof(ip_str_t)))
+        if (!inet_ntop(fam, &addr->ipv4_addr.dst_addr, pp_info->dst_ip_str, sizeof(ip_str_t)))
         {
             return ERR_PP2_IPV4_DST_IP;
         }
@@ -494,13 +520,13 @@ static int ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
         pkt += sizeof(addr->ipv4_addr);
         tlv_vectors_len = len - sizeof(addr->ipv4_addr);
     }
-    else if (sa_family == AF_INET6 && len >= sizeof(addr->ipv6_addr))
+    else if (fam == AF_INET6 && len >= sizeof(addr->ipv6_addr))
     {
-        if (!inet_ntop(sa_family, &addr->ipv6_addr.src_addr, pp_info->src_ip_str, sizeof(ip_str_t)))
+        if (!inet_ntop(fam, &addr->ipv6_addr.src_addr, pp_info->src_ip_str, sizeof(ip_str_t)))
         {
             return ERR_PP2_IPV6_SRC_IP;
         }
-        if (!inet_ntop(sa_family, &addr->ipv6_addr.dst_addr, pp_info->dst_ip_str, sizeof(ip_str_t)))
+        if (!inet_ntop(fam, &addr->ipv6_addr.dst_addr, pp_info->dst_ip_str, sizeof(ip_str_t)))
         {
             return ERR_PP2_IPV6_DST_IP;
         }
@@ -511,7 +537,7 @@ static int ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
         pkt += sizeof(addr->ipv6_addr);
         tlv_vectors_len = len - sizeof(addr->ipv6_addr);
     }
-    else if (sa_family == AF_UNIX && len >= sizeof(addr->unix_addr))
+    else if (fam == AF_UNIX && len >= sizeof(addr->unix_addr))
     {
         return ERR_PP2_UNSUPPORTED;
     }
