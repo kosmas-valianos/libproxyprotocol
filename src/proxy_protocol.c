@@ -91,7 +91,7 @@ typedef struct
     uint8_t value[1];
 } pp2_tlv_t;
 
-/* PP2_TYPE_SSL type and subtypes */
+/* PP2_TYPE_SSL subtypes */
 #define PP2_CLIENT_SSL           0x01
 #define PP2_CLIENT_CERT_CONN     0x02
 #define PP2_CLIENT_CERT_SESS     0x04
@@ -103,7 +103,7 @@ typedef struct
     pp2_tlv_t sub_tlv[1];
 } pp2_tlv_ssl_t;
 
-/* PP2_TYPE_AWS type and subtypes */
+/* PP2_TYPE_AWS subtypes */
 #define PP2_SUBTYPE_AWS_VPCE_ID 0x01
 
 typedef struct
@@ -179,6 +179,54 @@ static bool parse_port(const char *value, uint16_t *usport)
     }
     *usport = (uint16_t) port;
     return true;
+}
+
+static tlv_t *tlv_new(uint8_t type, uint16_t length, const uint8_t *value)
+{
+    tlv_t *tlv = malloc(sizeof(tlv_t) - 1 + length);
+    tlv->type = type;
+    tlv->length = length;
+    memcpy(tlv->value, value, length);
+    return tlv;
+}
+
+static tlv_array_append_tlv(tlv_array_t *tlv_array, tlv_t *tlv)
+{
+    if (!tlv_array->tlvs)
+    {
+        tlv_array->len = 0;
+        tlv_array->size = 10;
+        tlv_array->tlvs = malloc(tlv_array->size * sizeof(tlv_t*));
+    }
+
+    if (tlv_array->size == tlv_array->len)
+    {
+        tlv_array->size += 5;
+        tlv_array->tlvs = realloc(tlv_array->tlvs, tlv_array->size * sizeof(tlv_t*));
+    }
+
+    tlv_array->len++;
+    tlv_array->tlvs[tlv_array->len - 1] = tlv;
+}
+
+static void tlv_array_clear(tlv_array_t *tlv_array)
+{
+    uint32_t i;
+    for (i = 0; i < tlv_array->len; i++)
+    {
+        free(tlv_array->tlvs[i]);
+        tlv_array->tlvs[i] = NULL;
+    }
+    tlv_array->len = 0;
+    tlv_array->size = 0;
+    free(tlv_array->tlvs);
+
+}
+
+void pp_info_clear(pp_info_t *pp_info)
+{
+    tlv_array_clear(&pp_info->tlv_array);
+    memset(pp_info, 0, sizeof(*pp_info));
 }
 
 uint8_t *ppv2_create_message(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp_msg_v2_len, int *error)
@@ -348,10 +396,10 @@ static uint32_t crc32c(const uint8_t *buf, uint32_t len)
 }
 
 /* Verifies and parses a version 2 PROXY message */
-static int ppv2_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
+static int ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
 {
-    const uint8_t *proxy_msg = pkt;
-    const proxy_hdr_v2_t *proxy_hdr = (proxy_hdr_v2_t *) pkt;
+    uint8_t *proxy_msg = pkt;
+    proxy_hdr_v2_t *proxy_hdr = (proxy_hdr_v2_t *) pkt;
 
     /* Constant 12 bytes block containing the protocol signature */
     if (memcmp(proxy_hdr->sig, "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A", sizeof(proxy_hdr->sig)))
@@ -401,7 +449,7 @@ static int ppv2_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
      * - destination layer 4 address if any, in network byte order (port)
      */
     pkt += sizeof(proxy_hdr_v2_t);
-    proxy_addr_t *addr = (proxy_addr_t *) pkt;
+    const proxy_addr_t *addr = (proxy_addr_t *) pkt;
     uint16_t tlv_vectors_len = 0;
     if (sa_family == AF_INET && len >= sizeof(addr->ipv4_addr))
     {
@@ -497,13 +545,16 @@ static int ppv2_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
                 return ERR_PP2_TYPE_AWS;
             }
             pp2_tlv_aws_t *pp2_tlv_aws = (pp2_tlv_aws_t *) pp2_tlv->value;
+            uint16_t pp2_tlv_aws_len = pp2_tlv_len - 1;
             if (pp2_tlv_aws->type == PP2_SUBTYPE_AWS_VPCE_ID)
             {
-                char *vpce_id = malloc(pp2_tlv_len);
-                memcpy(vpce_id, pp2_tlv_aws->value, pp2_tlv_len - 1);
-                vpce_id[pp2_tlv_len-1] = '\0';
-                fprintf(stderr, "Connection is done through Private Link/Interface VPC endpoint %s\n", vpce_id);
-                free(vpce_id);
+                //char *vpce_id = malloc(pp2_tlv_len);
+                //memcpy(vpce_id, pp2_tlv_aws->value, pp2_tlv_len - 1);
+                //vpce_id[pp2_tlv_len-1] = '\0';
+                //fprintf(stderr, "Connection is done through Private Link/Interface VPC endpoint %s\n", vpce_id);
+                tlv_t *tlv = tlv_new(pp2_tlv_aws->type, pp2_tlv_aws_len, pp2_tlv_aws->value);
+                tlv_array_append_tlv(&pp_info->tlv_array, tlv);
+                //free(vpce_id);
             }
             break;
         }
@@ -679,7 +730,7 @@ static int ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
     return length;
 }
 
-int pp_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
+int pp_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
 {
     if (pktlen > 16 && !memcmp(pkt, "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A\x21", 13))
     {
