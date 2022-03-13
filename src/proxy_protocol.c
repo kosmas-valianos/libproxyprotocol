@@ -68,21 +68,6 @@ typedef union
     } unix_addr;
 } proxy_addr_t;
 
-/* Type-Length-Value (TLV vectors) */
-#define PP2_TYPE_ALPN           0x01
-#define PP2_TYPE_AUTHORITY      0x02
-#define PP2_TYPE_CRC32C         0x03
-#define PP2_TYPE_NOOP           0x04
-#define PP2_TYPE_SSL            0x20
-#define PP2_SUBTYPE_SSL_VERSION 0x21
-#define PP2_SUBTYPE_SSL_CN      0x22
-#define PP2_SUBTYPE_SSL_CIPHER  0x23
-#define PP2_SUBTYPE_SSL_SIG_ALG 0x24
-#define PP2_SUBTYPE_SSL_KEY_ALG 0x25
-#define PP2_TYPE_NETNS          0x30
-/* Custom TLVs */
-#define PP2_TYPE_AWS            0xEA
-
 typedef struct
 {
     uint8_t type;
@@ -91,20 +76,12 @@ typedef struct
     uint8_t value[1];
 } pp2_tlv_t;
 
-/* PP2_TYPE_SSL subtypes */
-#define PP2_CLIENT_SSL           0x01
-#define PP2_CLIENT_CERT_CONN     0x02
-#define PP2_CLIENT_CERT_SESS     0x04
-
 typedef struct
 {
     uint8_t   client;
     uint32_t  verify;
     pp2_tlv_t sub_tlv[1];
 } pp2_tlv_ssl_t;
-
-/* PP2_TYPE_AWS subtypes */
-#define PP2_SUBTYPE_AWS_VPCE_ID 0x01
 
 typedef struct
 {
@@ -221,6 +198,35 @@ static void tlv_array_clear(tlv_array_t *tlv_array)
     tlv_array->size = 0;
     free(tlv_array->tlvs);
 
+}
+
+uint8_t *pp_info_get_tlv_value(const pp_info_t *pp_info, uint8_t type, uint8_t subtype, uint16_t *value_len_out)
+{
+    *value_len_out = 0;
+    if (!pp_info->tlv_array.tlvs || !pp_info->tlv_array.len)
+    {
+        return NULL;
+    }
+
+    uint32_t i;
+    for (i = 0; i < pp_info->tlv_array.len; i++)
+    {
+        tlv_t *tlv = pp_info->tlv_array.tlvs[i];
+        if (tlv->type == type)
+        {
+            if (subtype > 0)
+            {
+                if (tlv->value[0] == subtype)
+                {
+                    *value_len_out = tlv->length;
+                    return &tlv->value[1];
+                }
+                return NULL;
+            }
+            return tlv->value;
+        }
+    }
+    return NULL;
 }
 
 void pp_info_clear(pp_info_t *pp_info)
@@ -546,15 +552,13 @@ static int ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
             }
             pp2_tlv_aws_t *pp2_tlv_aws = (pp2_tlv_aws_t *) pp2_tlv->value;
             uint16_t pp2_tlv_aws_len = pp2_tlv_len - 1;
+            /* Connection is done through Private Link/Interface VPC endpoint */
             if (pp2_tlv_aws->type == PP2_SUBTYPE_AWS_VPCE_ID)
             {
-                //char *vpce_id = malloc(pp2_tlv_len);
-                //memcpy(vpce_id, pp2_tlv_aws->value, pp2_tlv_len - 1);
-                //vpce_id[pp2_tlv_len-1] = '\0';
-                //fprintf(stderr, "Connection is done through Private Link/Interface VPC endpoint %s\n", vpce_id);
-                tlv_t *tlv = tlv_new(pp2_tlv_aws->type, pp2_tlv_aws_len, pp2_tlv_aws->value);
+                /* +1 to save it as a string */
+                tlv_t *tlv = tlv_new(pp2_tlv->type, pp2_tlv_len + 1, pp2_tlv->value);
+                tlv->value[pp2_tlv_len] = '\0';
                 tlv_array_append_tlv(&pp_info->tlv_array, tlv);
-                //free(vpce_id);
             }
             break;
         }
@@ -575,7 +579,6 @@ static int ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
     char *ptr = block;
     int length = 0;
     memcpy(block, pkt, pktlen < PP1_MAX_LENGHT ? pktlen : PP1_MAX_LENGHT);
-    memset(pp_info, 0, sizeof(*pp_info));
 
     char *block_end = strstr(block, crlf);
     if (!block_end)
@@ -732,6 +735,7 @@ static int ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
 
 int pp_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
 {
+    memset(pp_info, 0, sizeof(*pp_info));
     if (pktlen > 16 && !memcmp(pkt, "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A\x21", 13))
     {
         return ppv2_parse(pkt, pktlen, pp_info);

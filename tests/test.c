@@ -77,8 +77,10 @@ int main(int argc, char **argv)
         printf("Running test: %s...", tests[i].name);
         if (tests[i].raw_bytes_in)
         {
-            pp_info_t ppv1_info_out = { 0 };
+            pp_info_t ppv1_info_out;
             int rc = pp_parse(tests[i].raw_bytes_in, tests[i].raw_bytes_in_length, &ppv1_info_out);
+            uint16_t tlv_value_len;
+            uint8_t *tlv_value = pp_info_get_tlv_value(&ppv1_info_out, PP2_TYPE_AWS, PP2_SUBTYPE_AWS_VPCE_ID, &tlv_value_len);
             if (rc != tests[i].rc_expected || memcmp(&ppv1_info_out, &tests[i].pp_info_out_expected, sizeof(pp_info_t)- sizeof(tlv_array_t)))
             {
                 printf("FAILED\n");
