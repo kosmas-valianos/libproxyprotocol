@@ -96,7 +96,10 @@ typedef struct
 enum
 {
     ERR_NULL,
+    ERR_PP_VERSION,
     ERR_PP2_SIG,
+    ERR_PP2_VERSION,
+    /* TODO */
     ERR_PP2_VERSION_CMD,
     ERR_PP2_TRANSPORT_FAMILY,
     ERR_PP2_LENGTH,
@@ -122,8 +125,10 @@ enum
 
 static const char *errors[] = {
     "No error",
+    "Invalind PROXY protocol version given. Only 1 and 2 are valid",
     "Invalid v2 PROXY message: wrong protocol signature",
-    "Invalid v2 PROXY message: wrong protocol version or command: %d. Only 0x21 is accepted",
+    "Invalid v2 PROXY message: wrong protocol version",
+    "Invalid v2 PROXY message: wrong protocol version or command: Only 0x21 is accepted",
     "Invalid v2 PROXY message: wrong transport protocol or address family",
     "Invalid v2 PROXY message: length",
     "Invalid v2 PROXY message: invalid IPv4 src IP",
@@ -151,7 +156,6 @@ static bool parse_port(const char *value, uint16_t *usport)
     uint64_t port = strtoul(value, NULL, 10);
     if (port == 0 || port > UINT16_MAX)
     {
-        fprintf(stderr, "Illegal port %s", value);
         return false;
     }
     *usport = (uint16_t) port;
@@ -235,7 +239,7 @@ void pp_info_clear(pp_info_t *pp_info)
     memset(pp_info, 0, sizeof(*pp_info));
 }
 
-uint8_t *ppv2_create_message(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp_msg_v2_len, int *error)
+uint8_t *pp2_create_msg(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp2_msg_len, int *error)
 {
     typedef struct
     {
@@ -243,7 +247,7 @@ uint8_t *ppv2_create_message(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp
         proxy_addr_t   proxy_addr;
     } proxy_message_v2_t;
 
-    uint16_t len = (fam == AF_INET) ? 12 : 36;
+    uint16_t len = fam == AF_INET ? 12 : 36;
     proxy_message_v2_t msg = {
             .proxy_hdr_v2.sig = "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A",
             .proxy_hdr_v2.ver_cmd = '\x21',
@@ -283,25 +287,41 @@ uint8_t *ppv2_create_message(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp
     }
 
     /* Serialize the msg */
-    *pp_msg_v2_len = sizeof(proxy_hdr_v2_t) + len;
-    uint8_t *pp_msg_v2 = malloc(*pp_msg_v2_len);
-    memcpy(pp_msg_v2, &msg.proxy_hdr_v2, sizeof(proxy_hdr_v2_t));
-    memcpy(pp_msg_v2 + sizeof(proxy_hdr_v2_t), &msg.proxy_addr, len);
+    *pp2_msg_len = sizeof(proxy_hdr_v2_t) + len;
+    uint8_t *pp2_msg = malloc(*pp2_msg_len);
+    memcpy(pp2_msg, &msg.proxy_hdr_v2, sizeof(proxy_hdr_v2_t));
+    memcpy(pp2_msg + sizeof(proxy_hdr_v2_t), &msg.proxy_addr, len);
 
     *error = ERR_NULL;
-    return pp_msg_v2;
+    return pp2_msg;
 }
 
-char *ppv1_create_message(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp_msg_v1_len, int *error)
+static uint8_t *pp1_create_msg(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp1_msg_len, int *error)
 {
     char block[PP1_MAX_LENGHT];
-    *pp_msg_v1_len = snprintf(block, sizeof(block), "PROXY %s %s %s %hu %hu%s",
+    *pp1_msg_len = snprintf(block, sizeof(block), "PROXY %s %s %s %hu %hu%s",
         fam == AF_INET ? "TCP4" : "TCP6", pp_info->src_ip_str, pp_info->dst_ip_str, pp_info->src_port, pp_info->dst_port, crlf);
-    char *pp_msg_v1 = malloc(*pp_msg_v1_len);
-    memcpy(pp_msg_v1, block, *pp_msg_v1_len);
-    fprintf(stderr, "v1 PROXY message: %.*s\n", *pp_msg_v1_len-2, pp_msg_v1);
+    uint8_t *pp1_msg = malloc(*pp1_msg_len);
+    memcpy(pp1_msg, block, *pp1_msg_len);
     *error = ERR_NULL;
-    return pp_msg_v1;
+    return pp1_msg;
+}
+
+uint8_t *pp_create_msg(uint8_t version, uint8_t fam, const pp_info_t *pp_info, uint32_t *pp_msg_len, int *error)
+{
+    if (version == 1)
+    {
+        return pp1_create_msg(fam, pp_info, pp_msg_len, error);
+    }
+    else if (version == 2)
+    {
+        return pp2_create_msg(fam, pp_info, pp_msg_len, error);
+    }
+    else
+    {
+        *error = ERR_PP_VERSION;
+        return NULL;
+    }
 }
 
 /*****************************************************************/
@@ -568,7 +588,6 @@ static int ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
         pkt += pp2_tlv_offset; tlv_vectors_len -= pp2_tlv_offset;
     }
 
-    fprintf(stderr, "ELB %s:%hu Client %s:%hu\n", pp_info->dst_ip_str, pp_info->dst_port, pp_info->src_ip_str, pp_info->src_port);
     return sizeof(proxy_hdr_v2_t) + len;
 }
 
@@ -699,7 +718,6 @@ static int ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
         return ERR_PP1_SRC_PORT;
     }
     ptr += src_port_length;
-    printf("here1 with %d\n", pp_info->src_port);
 
     /* Exactly one space */
     if (*ptr != '\x20')
@@ -729,7 +747,6 @@ static int ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
         return ERR_PP1_CRLF;
     }
 
-    fprintf(stderr, "ELB %s:%hu Client %s:%hu\n", pp_info->dst_ip_str, pp_info->dst_port, pp_info->src_ip_str, pp_info->src_port);
     return length;
 }
 

@@ -4,12 +4,14 @@
 
 typedef struct
 {
-    const char    *name;
-    pp_info_t      pp_info_in;
-    uint8_t       *raw_bytes_in;
-    uint32_t       raw_bytes_in_length;
-    int            rc_expected;
-    pp_info_t      pp_info_out_expected;
+    const char *name;
+    uint8_t     version;
+    uint8_t     fam;
+    pp_info_t   pp_info_in;
+    uint8_t    *raw_bytes_in;
+    uint32_t    raw_bytes_in_length;
+    int         rc_expected;
+    pp_info_t   pp_info_out_expected;
 } test_t;
 
 uint8_t vpce_msg[] = {
@@ -68,28 +70,63 @@ int main(int argc, char **argv)
                 .dst_port = 80
             },
         },
+        {
+            .name = "v2 PROXY message: create and parse",
+            .version = 2,
+            .fam = AF_INET,
+            .pp_info_in = {
+                .src_ip_str = "172.31.7.113",
+                .src_port = 51442,
+                .dst_ip_str = "172.31.10.31",
+                .dst_port = 80
+            },
+            .pp_info_out_expected = tests[3].pp_info_in,
+        },
+        {
+            .name = "v1 PROXY message: create and parse",
+            .version = 1,
+            .fam = AF_INET,
+            .pp_info_in = {
+                .src_ip_str = "172.31.7.113",
+                .src_port = 51442,
+                .dst_ip_str = "172.31.10.31",
+                .dst_port = 80
+            },
+            .pp_info_out_expected = tests[4].pp_info_in,
+        },
     };
 
     // Run tests
     uint32_t i;
-    for (i = 0; i < 3; i++)
+    for (i = 0; i < 5; i++)
     {
         printf("Running test: %s...", tests[i].name);
+        pp_info_t pp_info_out;
+        int rc;
         if (tests[i].raw_bytes_in)
         {
-            pp_info_t ppv1_info_out;
-            int rc = pp_parse(tests[i].raw_bytes_in, tests[i].raw_bytes_in_length, &ppv1_info_out);
-            uint16_t tlv_value_len;
-            uint8_t *tlv_value = pp_info_get_tlv_value(&ppv1_info_out, PP2_TYPE_AWS, PP2_SUBTYPE_AWS_VPCE_ID, &tlv_value_len);
-            if (rc != tests[i].rc_expected || memcmp(&ppv1_info_out, &tests[i].pp_info_out_expected, sizeof(pp_info_t)- sizeof(tlv_array_t)))
-            {
-                printf("FAILED\n");
-                pp_info_clear(&ppv1_info_out);
-                return EXIT_FAILURE;
-            }
-            pp_info_clear(&ppv1_info_out);
-            printf("PASSED\n");
+            rc = pp_parse(tests[i].raw_bytes_in, tests[i].raw_bytes_in_length, &pp_info_out);
+            //uint16_t tlv_value_len;
+            //uint8_t *tlv_value = pp_info_get_tlv_value(&ppv1_info_out, PP2_TYPE_AWS, PP2_SUBTYPE_AWS_VPCE_ID, &tlv_value_len);
         }
+        else
+        {
+            uint32_t pp_msg_len;
+            int error;
+            uint8_t *pp_msg = pp_create_msg(tests[i].version, tests[i].fam, &tests[i].pp_info_in, &pp_msg_len, &error);
+            tests[i].rc_expected = pp_msg_len;
+            rc = pp_parse(pp_msg, pp_msg_len, &pp_info_out);
+            free(pp_msg);
+        }
+
+        if (rc != tests[i].rc_expected || memcmp(&pp_info_out, &tests[i].pp_info_out_expected, sizeof(pp_info_t) - sizeof(tlv_array_t)))
+        {
+            printf("FAILED\n");
+            pp_info_clear(&pp_info_out);
+            return EXIT_FAILURE;
+        }
+        pp_info_clear(&pp_info_out);
+        printf("PASSED\n");
     }
     printf("ALl tests completed successfully\n");
     getchar();

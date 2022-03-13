@@ -61,8 +61,7 @@ typedef struct
 
 uint8_t *pp_info_get_tlv_value(const pp_info_t* pp_info, uint8_t type, uint8_t subtype, uint16_t *value_len_out);
 void     pp_info_clear(pp_info_t* pp_info);
-uint8_t *ppv2_create_message(uint8_t fam, const pp_info_t *proxy_info, uint32_t *pp_msg_v2_len, int *error);
-char    *ppv1_create_message(uint8_t fam, const pp_info_t *proxy_info, uint32_t *pp_msg_v1_len, int *error);
+uint8_t *pp_create_msg(uint8_t version, uint8_t fam, const pp_info_t *pp_info, uint32_t *pp_msg_len, int *error);
 int      pp_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info);
 
 #endif
