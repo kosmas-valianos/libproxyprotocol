@@ -141,7 +141,7 @@ static bool parse_port(const char *value, uint16_t *usport)
     return true;
 }
 
-static tlv_t *tlv_new(uint8_t type, uint16_t length, const uint8_t *value)
+static tlv_t *tlv_new(uint8_t type, uint16_t length, const void *value)
 {
     tlv_t *tlv = malloc(sizeof(tlv_t) - 1 + length);
     tlv->type = type;
@@ -206,6 +206,7 @@ uint8_t *pp_info_get_tlv_value(const pp_info_t *pp_info, uint8_t type, uint8_t s
                 }
                 return NULL;
             }
+            *value_len_out = tlv->length;
             return tlv->value;
         }
     }
@@ -601,12 +602,14 @@ static int ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
             crc32c_chksum = ntohl(crc32c_chksum);
 
             memset(pp2_tlv->value, 0, pp2_tlv_len);
-            uint32_t crc32c_cacl = crc32c(proxy_msg, sizeof(proxy_hdr_v2_t) + len);
-            fprintf(stderr, "Received CRC32C checksum is %u. Calculated CRC32C checksum is %u\n", crc32c_chksum, crc32c_cacl);
-            if (crc32c_chksum != crc32c_cacl)
+            uint32_t crc32c_calculated = crc32c(proxy_msg, sizeof(proxy_hdr_v2_t) + len);
+            if (crc32c_chksum != crc32c_calculated)
             {
                 return ERR_PP2_TYPE_CRC32C;
             }
+
+            tlv_t *tlv = tlv_new(pp2_tlv->type, pp2_tlv_len, &crc32c_chksum);
+            tlv_array_append_tlv(&pp_info->tlv_array, tlv);
             break;
         }
         case PP2_TYPE_NOOP:

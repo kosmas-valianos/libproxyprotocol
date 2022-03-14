@@ -6,6 +6,14 @@
 
 typedef struct
 {
+    uint8_t  type;
+    uint8_t  subtype;
+    uint16_t value_len;
+    uint8_t *value;
+} test_tlv_t;
+
+typedef struct
+{
     const char *name;
     uint8_t     version;
     uint8_t     fam;
@@ -14,6 +22,7 @@ typedef struct
     uint32_t    raw_bytes_in_length;
     int         rc_expected;
     pp_info_t   pp_info_out_expected;
+    test_tlv_t  expected_tlvs[10];
 } test_t;
 
 uint8_t vpce_msg[] = {
@@ -43,6 +52,25 @@ uint8_t vpce_msg[] = {
             0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, /* NOOP TLV end */
 };
+
+static uint8_t pp_verify_tlvs(const pp_info_t *pp_info, const test_tlv_t (*expected_tlvs)[10])
+{
+    uint8_t i;
+    for (i = 0; i < 10; i++)
+    {
+        test_tlv_t *test_tlv = &(*expected_tlvs)[i];
+        if (test_tlv->type != 0)
+        {
+            uint16_t tlv_value_len;
+            uint8_t *tlv_value = pp_info_get_tlv_value(pp_info, test_tlv->type, test_tlv->subtype, &tlv_value_len);
+            if (!tlv_value || tlv_value_len != test_tlv->value_len || memcmp(tlv_value, test_tlv->value, tlv_value_len))
+            {
+                return 0;
+            }
+        }
+    }
+    return 1;
+}
 
 static uint8_t pp_info_equal(const pp_info_t *pp_info_a, const pp_info_t *pp_info_b)
 {
@@ -75,9 +103,10 @@ int main(int argc, char **argv)
     test_t tests[] = {
         {
             .name = "v1 PROXY message: UNKNOWN - short",
-            .raw_bytes_in = (uint8_t *) "PROXY UNKNOWN\r\n",
-            .raw_bytes_in_length = strlen((char *) tests[0].raw_bytes_in),
-            .rc_expected = strlen((char *) tests[0].raw_bytes_in),
+            .raw_bytes_in = (uint8_t*)"PROXY UNKNOWN\r\n",
+            .raw_bytes_in_length = strlen((char*)tests[0].raw_bytes_in),
+            .rc_expected = strlen((char*)tests[0].raw_bytes_in),
+            .expected_tlvs = {0}
         },
         {
             .name = "v1 PROXY message: UNKNOWN - full",
@@ -86,7 +115,7 @@ int main(int argc, char **argv)
             .rc_expected = strlen((char *) tests[1].raw_bytes_in),
         },
         {
-            .name = "v2 PROXY message: PROXY, AF_INET, PP2_TYPE_CRC32C, PP2_SUBTYPE_AWS_VPCE_ID",
+            .name = "v2 PROXY message: PROXY, AF_INET, PP2_TYPE_CRC32C, PP2_TYPE_AWS(PP2_SUBTYPE_AWS_VPCE_ID)",
             .raw_bytes_in = vpce_msg,
             .raw_bytes_in_length = sizeof(vpce_msg),
             .rc_expected = sizeof(vpce_msg),
@@ -95,6 +124,10 @@ int main(int argc, char **argv)
                 .dst_addr = "172.31.10.31",
                 .src_port = 51442,
                 .dst_port = 80
+            },
+            .expected_tlvs = {
+                {.type = PP2_TYPE_CRC32C, .value_len = 4, .value = "\x2d\x89\xd6\xe8"},
+                {.type = PP2_TYPE_AWS, .value_len = 24, .value = "\x1vpce-08d2bf15fac5001c9"},
             },
         },
         {
@@ -169,7 +202,7 @@ int main(int argc, char **argv)
             free(pp_msg);
         }
 
-        if (rc != tests[i].rc_expected || !pp_info_equal(&pp_info_out, &tests[i].pp_info_out_expected))
+        if (rc != tests[i].rc_expected || !pp_info_equal(&pp_info_out, &tests[i].pp_info_out_expected) || !pp_verify_tlvs(&pp_info_out, &tests[i].expected_tlvs))
         {
             printf("FAILED\n");
             pp_info_clear(&pp_info_out);
