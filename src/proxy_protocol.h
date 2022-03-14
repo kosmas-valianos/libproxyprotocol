@@ -34,8 +34,6 @@
 /* PP2_TYPE_AWS subtypes */
 #define PP2_SUBTYPE_AWS_VPCE_ID 0x01
 
-typedef char ip_str_t[INET6_ADDRSTRLEN];
-
 typedef struct
 {
     uint8_t  type;
@@ -52,16 +50,18 @@ typedef struct
 
 typedef struct
 {
-    ip_str_t    src_ip_str;
+    // TODO maybe is local bool so that caller can quickly ignore
+    uint8_t     src_addr[108];
+    uint8_t     dst_addr[108];
     uint16_t    src_port;
-    ip_str_t    dst_ip_str;
     uint16_t    dst_port;
     tlv_array_t tlv_array;
 } pp_info_t;
 
-uint8_t *pp_info_get_tlv_value(const pp_info_t* pp_info, uint8_t type, uint8_t subtype, uint16_t *value_len_out);
-void     pp_info_clear(pp_info_t* pp_info);
-uint8_t *pp_create_msg(uint8_t version, uint8_t fam, const pp_info_t *pp_info, uint32_t *pp_msg_len, int *error);
-int      pp_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info);
+const char *pp_strerror(uint32_t error);
+uint8_t    *pp_info_get_tlv_value(const pp_info_t* pp_info, uint8_t type, uint8_t subtype, uint16_t *value_len_out);
+void        pp_info_clear(pp_info_t* pp_info);
+uint8_t    *pp_create_msg(uint8_t version, uint8_t fam, const pp_info_t *pp_info, uint32_t *pp_msg_len, int *error);
+int         pp_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info);
 
 #endif

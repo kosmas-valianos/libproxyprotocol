@@ -2,6 +2,8 @@
 #include <string.h>
 #include "../src/proxy_protocol.h"
 
+#define NUM_ELEMS(array) (uint32_t)(sizeof(array) / sizeof(array[0]))
+
 typedef struct
 {
     const char *name;
@@ -64,41 +66,51 @@ int main(int argc, char **argv)
             .raw_bytes_in_length = sizeof(vpce_msg),
             .rc_expected = sizeof(vpce_msg),
             .pp_info_out_expected = {
-                .src_ip_str = "172.31.7.113",
+                .src_addr = "172.31.7.113",
+                .dst_addr = "172.31.10.31",
                 .src_port = 51442,
-                .dst_ip_str = "172.31.10.31",
                 .dst_port = 80
             },
         },
         {
-            .name = "v2 PROXY message: create and parse",
+            .name = "v2 PROXY message: AF_INET create and parse",
             .version = 2,
             .fam = AF_INET,
             .pp_info_in = {
-                .src_ip_str = "172.31.7.113",
+                .src_addr = "172.31.7.113",
+                .dst_addr = "172.31.10.31",
                 .src_port = 51442,
-                .dst_ip_str = "172.31.10.31",
                 .dst_port = 80
             },
             .pp_info_out_expected = tests[3].pp_info_in,
         },
         {
-            .name = "v1 PROXY message: create and parse",
+            .name = "v1 PROXY message: AF_INET create and parse",
             .version = 1,
             .fam = AF_INET,
             .pp_info_in = {
-                .src_ip_str = "172.31.7.113",
+                .src_addr = "172.31.7.113",
+                .dst_addr = "172.31.10.31",
                 .src_port = 51442,
-                .dst_ip_str = "172.31.10.31",
                 .dst_port = 80
             },
             .pp_info_out_expected = tests[4].pp_info_in,
+        },
+        {
+            .name = "v2 PROXY message: AF_UNIX create and parse",
+            .version = 2,
+            .fam = AF_UNIX,
+            .pp_info_in = {
+                .src_addr = "/tmp/testsocket1.socket",
+                .dst_addr = "/tmp/testsocket2.socket",
+            },
+            .pp_info_out_expected = tests[5].pp_info_in,
         },
     };
 
     // Run tests
     uint32_t i;
-    for (i = 0; i < 5; i++)
+    for (i = 0; i < NUM_ELEMS(tests); i++)
     {
         printf("Running test: %s...", tests[i].name);
         pp_info_t pp_info_out;

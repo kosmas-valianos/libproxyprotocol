@@ -106,7 +106,6 @@ enum
     ERR_PP2_IPV4_DST_IP,
     ERR_PP2_IPV6_SRC_IP,
     ERR_PP2_IPV6_DST_IP,
-    ERR_PP2_UNSUPPORTED,
     ERR_PP2_TLV_LENGTH,
     ERR_PP2_TYPE_CRC32C,
     ERR_PP2_TYPE_AWS,
@@ -134,7 +133,6 @@ static const char *errors[] = {
     "Invalid v2 PROXY message: invalid IPv4 dst IP"
     "Invalid v2 PROXY message: invalid IPv6 src IP",
     "Invalid v2 PROXY message: invalid IPv6 dst IP",
-    "Invalid v2 PROXY message: unsupported",
     "Invalid v2 PROXY message: invalid TLV vector's length",
     "Invalid v2 PROXY message: invalid PP2_TYPE_CRC32C",
     "Invalid v2 PROXY message: invalid PP2_TYPE_AWS",
@@ -149,6 +147,15 @@ static const char *errors[] = {
     "Invalid v1 PROXY message: invalid src port",
     "Invalid v1 PROXY message: invalid dst port",
 };
+
+const char *pp_strerror(uint32_t error)
+{
+    if (error > ERR_PP1_DST_PORT)
+    {
+        return NULL;
+    }
+    return errors[error];
+}
 
 static bool parse_port(const char *value, uint16_t *usport)
 {
@@ -246,22 +253,22 @@ uint8_t *pp2_create_msg(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp2_msg
         proxy_addr_t   proxy_addr;
     } proxy_message_v2_t;
 
-    uint16_t len = fam == AF_INET ? 12 : 36;
     proxy_message_v2_t msg = {
             .proxy_hdr_v2.sig = "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A",
             .proxy_hdr_v2.ver_cmd = '\x21',
-            .proxy_hdr_v2.fam = (fam == AF_INET) ? '\x11' : '\x21',
-            .proxy_hdr_v2.len = htons(len)
     };
 
+    uint16_t len;
     if (fam == AF_INET)
     {
-        if (inet_pton(AF_INET, pp_info->src_ip_str, &msg.proxy_addr.ipv4_addr.src_addr) != 1)
+        msg.proxy_hdr_v2.fam = '\x11';
+        len = 12;
+        if (inet_pton(AF_INET, pp_info->src_addr, &msg.proxy_addr.ipv4_addr.src_addr) != 1)
         {
             *error = ERR_PP2_IPV4_SRC_IP;
             return NULL;
         }
-        if (inet_pton(AF_INET, pp_info->dst_ip_str, &msg.proxy_addr.ipv4_addr.dst_addr) != 1)
+        if (inet_pton(AF_INET, pp_info->dst_addr, &msg.proxy_addr.ipv4_addr.dst_addr) != 1)
         {
             *error = ERR_PP2_IPV4_DST_IP;
             return NULL;
@@ -271,12 +278,14 @@ uint8_t *pp2_create_msg(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp2_msg
     }
     else if (fam == AF_INET6)
     {
-        if (inet_pton(AF_INET6, pp_info->src_ip_str, &msg.proxy_addr.ipv6_addr.src_addr) != 1)
+        msg.proxy_hdr_v2.fam = '\x21';
+        len = 36;
+        if (inet_pton(AF_INET6, pp_info->src_addr, &msg.proxy_addr.ipv6_addr.src_addr) != 1)
         {
             *error = ERR_PP2_IPV6_SRC_IP;
             return NULL;
         }
-        if (inet_pton(AF_INET6, pp_info->dst_ip_str, &msg.proxy_addr.ipv6_addr.dst_addr) != 1)
+        if (inet_pton(AF_INET6, pp_info->dst_addr, &msg.proxy_addr.ipv6_addr.dst_addr) != 1)
         {
             *error = ERR_PP2_IPV6_DST_IP;
             return NULL;
@@ -284,6 +293,18 @@ uint8_t *pp2_create_msg(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp2_msg
         msg.proxy_addr.ipv6_addr.src_port = htons(pp_info->src_port);
         msg.proxy_addr.ipv6_addr.dst_port = htons(pp_info->dst_port);
     }
+    else if (fam == AF_UNIX)
+    {
+        msg.proxy_hdr_v2.fam = '\x31';
+        len = 216;
+        memcpy(msg.proxy_addr.unix_addr.src_addr, pp_info->src_addr, sizeof(pp_info->src_addr));
+        memcpy(msg.proxy_addr.unix_addr.dst_addr, pp_info->dst_addr, sizeof(pp_info->dst_addr));
+    }
+    else
+    {
+        return NULL;
+    }
+    msg.proxy_hdr_v2.len = htons(len);
 
     /* Serialize the msg */
     *pp2_msg_len = sizeof(proxy_hdr_v2_t) + len;
@@ -298,8 +319,12 @@ uint8_t *pp2_create_msg(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp2_msg
 static uint8_t *pp1_create_msg(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp1_msg_len, int *error)
 {
     char block[PP1_MAX_LENGHT];
+    if (fam == AF_UNIX)
+    {
+        return NULL;
+    }
     *pp1_msg_len = snprintf(block, sizeof(block), "PROXY %s %s %s %hu %hu%s",
-        fam == AF_INET ? "TCP4" : "TCP6", pp_info->src_ip_str, pp_info->dst_ip_str, pp_info->src_port, pp_info->dst_port, crlf);
+        fam == AF_INET ? "TCP4" : "TCP6", pp_info->src_addr, pp_info->dst_addr, pp_info->src_port, pp_info->dst_port, crlf);
     uint8_t *pp1_msg = malloc(*pp1_msg_len);
     memcpy(pp1_msg, block, *pp1_msg_len);
     *error = ERR_NULL;
@@ -505,11 +530,11 @@ static int ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
     }
     else if (fam == AF_INET && len >= sizeof(addr->ipv4_addr))
     {
-        if (!inet_ntop(fam, &addr->ipv4_addr.src_addr, pp_info->src_ip_str, sizeof(ip_str_t)))
+        if (!inet_ntop(fam, &addr->ipv4_addr.src_addr, pp_info->src_addr, sizeof(pp_info->src_addr)))
         {
             return ERR_PP2_IPV4_SRC_IP;
         }
-        if (!inet_ntop(fam, &addr->ipv4_addr.dst_addr, pp_info->dst_ip_str, sizeof(ip_str_t)))
+        if (!inet_ntop(fam, &addr->ipv4_addr.dst_addr, pp_info->dst_addr, sizeof(pp_info->dst_addr)))
         {
             return ERR_PP2_IPV4_DST_IP;
         }
@@ -522,11 +547,11 @@ static int ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
     }
     else if (fam == AF_INET6 && len >= sizeof(addr->ipv6_addr))
     {
-        if (!inet_ntop(fam, &addr->ipv6_addr.src_addr, pp_info->src_ip_str, sizeof(ip_str_t)))
+        if (!inet_ntop(fam, &addr->ipv6_addr.src_addr, pp_info->src_addr, sizeof(pp_info->src_addr)))
         {
             return ERR_PP2_IPV6_SRC_IP;
         }
-        if (!inet_ntop(fam, &addr->ipv6_addr.dst_addr, pp_info->dst_ip_str, sizeof(ip_str_t)))
+        if (!inet_ntop(fam, &addr->ipv6_addr.dst_addr, pp_info->dst_addr, sizeof(pp_info->dst_addr)))
         {
             return ERR_PP2_IPV6_DST_IP;
         }
@@ -539,7 +564,8 @@ static int ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
     }
     else if (fam == AF_UNIX && len >= sizeof(addr->unix_addr))
     {
-        return ERR_PP2_UNSUPPORTED;
+        memcpy(pp_info->src_addr, addr->unix_addr.src_addr, sizeof(addr->unix_addr.src_addr));
+        memcpy(pp_info->dst_addr, addr->unix_addr.dst_addr, sizeof(addr->unix_addr.dst_addr));
     }
     else
     {
@@ -693,9 +719,9 @@ static int ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
         return sa_family == AF_INET ? ERR_PP1_IPV4_SRC_IP : ERR_PP1_IPV6_SRC_IP;
     }
     uint16_t src_address_length = src_address_end - ptr;
-    memcpy(pp_info->src_ip_str, ptr, src_address_length);
+    memcpy(pp_info->src_addr, ptr, src_address_length);
     struct in6_addr src_sin_addr;
-    if (inet_pton(sa_family, pp_info->src_ip_str, &src_sin_addr) != 1)
+    if (inet_pton(sa_family, pp_info->src_addr, &src_sin_addr) != 1)
     {
         return sa_family == AF_INET ? ERR_PP1_IPV4_SRC_IP : ERR_PP1_IPV6_SRC_IP;
     }
@@ -715,9 +741,9 @@ static int ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
         return sa_family == AF_INET ? ERR_PP1_IPV4_DST_IP : ERR_PP1_IPV6_DST_IP;
     }
     uint16_t dst_address_length = dst_address_end - ptr;
-    memcpy(pp_info->dst_ip_str, ptr, dst_address_length);
+    memcpy(pp_info->dst_addr, ptr, dst_address_length);
     struct in6_addr dst_sin_addr;
-    if (inet_pton(sa_family, pp_info->dst_ip_str, &dst_sin_addr) != 1)
+    if (inet_pton(sa_family, pp_info->dst_addr, &dst_sin_addr) != 1)
     {
         return sa_family == AF_INET ? ERR_PP1_IPV4_DST_IP : ERR_PP1_IPV6_DST_IP;
     }
