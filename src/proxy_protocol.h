@@ -25,7 +25,9 @@ enum
     ERR_PP2_IPV6_DST_IP,
     ERR_PP2_TLV_LENGTH,
     ERR_PP2_TYPE_CRC32C,
+    ERR_PP2_TYPE_UNIQUE_ID,
     ERR_PP2_TYPE_AWS,
+    ERR_PP2_TYPE_AZURE,
     ERR_PP1_CRLF,
     ERR_PP1_PROXY,
     ERR_PP1_SPACE,
@@ -43,6 +45,7 @@ enum
 #define PP2_TYPE_AUTHORITY      0x02
 #define PP2_TYPE_CRC32C         0x03
 #define PP2_TYPE_NOOP           0x04
+#define PP2_TYPE_UNIQUE_ID      0x05
 #define PP2_TYPE_SSL            0x20
 #define PP2_SUBTYPE_SSL_VERSION 0x21
 #define PP2_SUBTYPE_SSL_CN      0x22
@@ -52,6 +55,7 @@ enum
 #define PP2_TYPE_NETNS          0x30
 /* Custom TLVs */
 #define PP2_TYPE_AWS            0xEA
+#define PP2_TYPE_AZURE          0xEE
 
 /* PP2_TYPE_SSL subtypes */
 #define PP2_CLIENT_SSL           0x01
@@ -60,6 +64,9 @@ enum
 
 /* PP2_TYPE_AWS subtypes */
 #define PP2_SUBTYPE_AWS_VPCE_ID 0x01
+
+/* PP2_TYPE_AZURE subtypes */
+#define PP2_SUBTYPE_AZURE_PRIVATEENDPOINT_LINKID 0x01
 
 typedef struct
 {

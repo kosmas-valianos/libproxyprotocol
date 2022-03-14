@@ -25,7 +25,8 @@ typedef struct
     test_tlv_t  expected_tlvs[10];
 } test_t;
 
-uint8_t vpce_msg[] = {
+/* https://github.com/aws/elastic-load-balancing-tools/blob/c8eee30ab991ab4c57dc37d1c58f09f67bd534aa/proprot/tst/com/amazonaws/proprot/Compatibility_AwsNetworkLoadBalancerTest.java#L41..L67 */
+uint8_t pp2_msg_vpce[] = {
             0x0d, 0x0a, 0x0d, 0x0a, /* Start of Sig */
             0x00, 0x0d, 0x0a, 0x51,
             0x55, 0x49, 0x54, 0x0a, /* End of Sig */
@@ -58,7 +59,7 @@ static uint8_t pp_verify_tlvs(const pp_info_t *pp_info, const test_tlv_t (*expec
     uint8_t i;
     for (i = 0; i < 10; i++)
     {
-        test_tlv_t *test_tlv = &(*expected_tlvs)[i];
+        const test_tlv_t *test_tlv = &(*expected_tlvs)[i];
         if (test_tlv->type != 0)
         {
             uint16_t tlv_value_len;
@@ -116,9 +117,9 @@ int main(int argc, char **argv)
         },
         {
             .name = "v2 PROXY message: PROXY, AF_INET, PP2_TYPE_CRC32C, PP2_TYPE_AWS(PP2_SUBTYPE_AWS_VPCE_ID)",
-            .raw_bytes_in = vpce_msg,
-            .raw_bytes_in_length = sizeof(vpce_msg),
-            .rc_expected = sizeof(vpce_msg),
+            .raw_bytes_in = pp2_msg_vpce,
+            .raw_bytes_in_length = sizeof(pp2_msg_vpce),
+            .rc_expected = sizeof(pp2_msg_vpce),
             .pp_info_out_expected = {
                 .src_addr = "172.31.7.113",
                 .dst_addr = "172.31.10.31",
@@ -126,8 +127,17 @@ int main(int argc, char **argv)
                 .dst_port = 80
             },
             .expected_tlvs = {
-                {.type = PP2_TYPE_CRC32C, .value_len = 4, .value = "\x2d\x89\xd6\xe8"},
-                {.type = PP2_TYPE_AWS, .value_len = 24, .value = "\x1vpce-08d2bf15fac5001c9"},
+                {
+                    .type = PP2_TYPE_CRC32C,
+                    .value_len = 4,
+                    .value = "\x2d\x89\xd6\xe8"
+                },
+                {
+                    .type = PP2_TYPE_AWS,
+                    .subtype = PP2_SUBTYPE_AWS_VPCE_ID,
+                    .value_len = 23,
+                    .value = "vpce-08d2bf15fac5001c9"
+                },
             },
         },
         {
@@ -212,6 +222,5 @@ int main(int argc, char **argv)
         printf("PASSED\n");
     }
     printf("ALl tests completed successfully\n");
-    getchar();
     return EXIT_SUCCESS;
 }

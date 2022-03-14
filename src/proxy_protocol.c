@@ -90,6 +90,12 @@ typedef struct
     uint8_t value[1];
 } pp2_tlv_aws_t;
 
+typedef struct
+{
+    uint8_t  type;
+    uint32_t linkid;
+} pp2_tlv_azure_t;
+
 /****************************************************************/
 
 #pragma pack()
@@ -108,7 +114,9 @@ static const char *errors[] = {
     "Invalid v2 PROXY message: invalid IPv6 dst IP",
     "Invalid v2 PROXY message: invalid TLV vector's length",
     "Invalid v2 PROXY message: invalid PP2_TYPE_CRC32C",
+    "Invalid v2 PROXY message: invalid PP2_TYPE_UNIQUE_ID",
     "Invalid v2 PROXY message: invalid PP2_TYPE_AWS",
+    "Invalid v2 PROXY message: invalid PP2_TYPE_AZURE",
     "Invalid v1 PROXY message: \"\\r\\n\" is missing",
     "Invalid v1 PROXY message: \"PROXY\" is missing",
     "Invalid v1 PROXY message: space is missing",
@@ -201,7 +209,7 @@ uint8_t *pp_info_get_tlv_value(const pp_info_t *pp_info, uint8_t type, uint8_t s
             {
                 if (tlv->value[0] == subtype)
                 {
-                    *value_len_out = tlv->length;
+                    *value_len_out = tlv->length - 1;
                     return &tlv->value[1];
                 }
                 return NULL;
@@ -586,11 +594,24 @@ static int ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
         {
             return ERR_PP2_TLV_LENGTH;
         }
+
         switch (pp2_tlv->type)
         {
         case PP2_TYPE_ALPN:
-        case PP2_TYPE_AUTHORITY:
+        {
+            tlv_t *tlv = tlv_new(pp2_tlv->type, pp2_tlv_len, pp2_tlv->value);
+            tlv_array_append_tlv(&pp_info->tlv_array, tlv);
             break;
+        }
+        case PP2_TYPE_AUTHORITY:
+        case PP2_TYPE_NETNS:
+        {
+            /* +1 to save it as a string */
+            tlv_t *tlv = tlv_new(pp2_tlv->type, pp2_tlv_len + 1, pp2_tlv->value);
+            tlv->value[pp2_tlv_len] = '\0';
+            tlv_array_append_tlv(&pp_info->tlv_array, tlv);
+            break;
+        }
         case PP2_TYPE_CRC32C:
         {
             if (pp2_tlv_len != sizeof(uint32_t))
@@ -613,13 +634,18 @@ static int ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
             break;
         }
         case PP2_TYPE_NOOP:
+            break;
+        case PP2_TYPE_UNIQUE_ID:
+        {
+            if (pp2_tlv_len > 128)
+            {
+                return ERR_PP2_TYPE_UNIQUE_ID;
+            }
+            tlv_t *tlv = tlv_new(pp2_tlv->type, pp2_tlv_len, pp2_tlv->value);
+            tlv_array_append_tlv(&pp_info->tlv_array, tlv);
+            break;
+        }
         case PP2_TYPE_SSL:
-        case PP2_SUBTYPE_SSL_VERSION:
-        case PP2_SUBTYPE_SSL_CN:
-        case PP2_SUBTYPE_SSL_CIPHER:
-        case PP2_SUBTYPE_SSL_SIG_ALG:
-        case PP2_SUBTYPE_SSL_KEY_ALG:
-        case PP2_TYPE_NETNS:
             break;
         case PP2_TYPE_AWS:
         {
@@ -631,9 +657,24 @@ static int ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
             /* Connection is done through Private Link/Interface VPC endpoint */
             if (pp2_tlv_aws->type == PP2_SUBTYPE_AWS_VPCE_ID)
             {
-                /* +1 to save it as a string */
+                /* +1 to save it as a string. Example: \x1vpce-08d2bf15fac5001c9 */
                 tlv_t *tlv = tlv_new(pp2_tlv->type, pp2_tlv_len + 1, pp2_tlv->value);
                 tlv->value[pp2_tlv_len] = '\0';
+                tlv_array_append_tlv(&pp_info->tlv_array, tlv);
+            }
+            break;
+        }
+        case PP2_TYPE_AZURE:
+        {
+            if (pp2_tlv_len < sizeof(pp2_tlv_azure_t))
+            {
+                return ERR_PP2_TYPE_AZURE;
+            }
+            pp2_tlv_azure_t *pp2_tlv_azure = (pp2_tlv_azure_t *) pp2_tlv->value;
+            /* Connection is done through Private Link service */
+            if (pp2_tlv_azure->type == PP2_TYPE_AZURE)
+            {
+                tlv_t *tlv = tlv_new(pp2_tlv->type, pp2_tlv_len, pp2_tlv->value);
                 tlv_array_append_tlv(&pp_info->tlv_array, tlv);
             }
             break;
@@ -641,7 +682,8 @@ static int ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
         default:
             break;
         }
-        pkt += pp2_tlv_offset; tlv_vectors_len -= pp2_tlv_offset;
+        pkt += pp2_tlv_offset;
+        tlv_vectors_len -= pp2_tlv_offset;
     }
 
     return sizeof(proxy_hdr_v2_t) + len;
