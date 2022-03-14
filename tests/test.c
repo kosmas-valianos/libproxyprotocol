@@ -98,16 +98,15 @@ static uint8_t pp_info_equal(const pp_info_t *pp_info_a, const pp_info_t *pp_inf
     return 1;
 }
 
-int main(int argc, char **argv)
+int main()
 {
     /* Define tests */
     test_t tests[] = {
         {
             .name = "v1 PROXY message: UNKNOWN - short",
-            .raw_bytes_in = (uint8_t*)"PROXY UNKNOWN\r\n",
+            .raw_bytes_in = (uint8_t *) "PROXY UNKNOWN\r\n",
             .raw_bytes_in_length = strlen((char*)tests[0].raw_bytes_in),
             .rc_expected = strlen((char*)tests[0].raw_bytes_in),
-            .expected_tlvs = {0}
         },
         {
             .name = "v1 PROXY message: UNKNOWN - full",
@@ -130,13 +129,13 @@ int main(int argc, char **argv)
                 {
                     .type = PP2_TYPE_CRC32C,
                     .value_len = 4,
-                    .value = "\x2d\x89\xd6\xe8"
+                    .value = (uint8_t *) "\x2d\x89\xd6\xe8"
                 },
                 {
                     .type = PP2_TYPE_AWS,
                     .subtype = PP2_SUBTYPE_AWS_VPCE_ID,
                     .value_len = 23,
-                    .value = "vpce-08d2bf15fac5001c9"
+                    .value = (uint8_t *) "vpce-08d2bf15fac5001c9"
                 },
             },
         },
