@@ -192,8 +192,6 @@ int main()
         if (tests[i].raw_bytes_in)
         {
             rc = pp_parse(tests[i].raw_bytes_in, tests[i].raw_bytes_in_length, &pp_info_out);
-            /*uint16_t tlv_value_len;
-             uint8_t *tlv_value = pp_info_get_tlv_value(&ppv1_info_out, PP2_TYPE_AWS, PP2_SUBTYPE_AWS_VPCE_ID, &tlv_value_len); */
         }
         else
         {
