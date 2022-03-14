@@ -46,7 +46,7 @@ uint8_t vpce_msg[] = {
 
 static uint8_t pp_info_equal(const pp_info_t *pp_info_a, const pp_info_t *pp_info_b)
 {
-    if (pp_info_a->local != pp_info_b->local)
+    if (pp_info_a->v2local != pp_info_b->v2local)
     {
         return 0;
     }
@@ -100,7 +100,7 @@ int main(int argc, char **argv)
         {
             .name = "v2 PROXY message: PROXY, AF_INET create and parse",
             .version = 2,
-            .fam = AF_INET,
+            .fam = '\x11',
             .pp_info_in = {
                 .src_addr = "172.31.7.113",
                 .dst_addr = "172.31.10.31",
@@ -124,7 +124,7 @@ int main(int argc, char **argv)
         {
             .name = "v2 PROXY message: PROXY, AF_UNIX create and parse",
             .version = 2,
-            .fam = AF_UNIX,
+            .fam = '\x31',
             .pp_info_in = {
                 .src_addr = "/tmp/testsocket1.socket",
                 .dst_addr = "/tmp/testsocket2.socket",
@@ -135,8 +135,8 @@ int main(int argc, char **argv)
             .name = "v2 PROXY message: LOCAL, AF_UNSPEC create and parse",
             .version = 2,
             .fam = '\x00',
-            .pp_info_in = { .local = 1 },
-            .pp_info_out_expected = { .local = 1 },
+            .pp_info_in = { .v2local = 1 },
+            .pp_info_out_expected = { .v2local = 1 },
         },
     };
 

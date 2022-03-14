@@ -255,13 +255,26 @@ uint8_t *pp2_create_msg(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp2_msg
 
     proxy_message_v2_t msg = {
             .proxy_hdr_v2.sig = "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A",
-            .proxy_hdr_v2.ver_cmd = pp_info->local ? '\x20' : '\x21',
+            .proxy_hdr_v2.ver_cmd = pp_info->v2local ? '\x20' : '\x21',
     };
 
     uint16_t len;
-    if (fam == AF_INET)
+    uint8_t transport_protocol = fam & 0x0f;
+    if (transport_protocol != 0x0 && transport_protocol != 0x1 && transport_protocol != 0x2)
     {
-        msg.proxy_hdr_v2.fam = '\x11';
+        return NULL;
+    }
+    uint8_t address_family = fam >> 4;
+    if (address_family == 0x0)
+    {
+        len = 0;
+        if (!pp_info->v2local)
+        {
+            return NULL;
+        }
+    }
+    else if (address_family == 0x1)
+    {
         len = 12;
         if (inet_pton(AF_INET, pp_info->src_addr, &msg.proxy_addr.ipv4_addr.src_addr) != 1)
         {
@@ -276,9 +289,8 @@ uint8_t *pp2_create_msg(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp2_msg
         msg.proxy_addr.ipv4_addr.src_port = htons(pp_info->src_port);
         msg.proxy_addr.ipv4_addr.dst_port = htons(pp_info->dst_port);
     }
-    else if (fam == AF_INET6)
+    else if (address_family == 0x2)
     {
-        msg.proxy_hdr_v2.fam = '\x21';
         len = 36;
         if (inet_pton(AF_INET6, pp_info->src_addr, &msg.proxy_addr.ipv6_addr.src_addr) != 1)
         {
@@ -293,21 +305,17 @@ uint8_t *pp2_create_msg(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp2_msg
         msg.proxy_addr.ipv6_addr.src_port = htons(pp_info->src_port);
         msg.proxy_addr.ipv6_addr.dst_port = htons(pp_info->dst_port);
     }
-    else if (fam == AF_UNIX)
+    else if (address_family == 0x3)
     {
-        msg.proxy_hdr_v2.fam = '\x31';
         len = 216;
         memcpy(msg.proxy_addr.unix_addr.src_addr, pp_info->src_addr, sizeof(pp_info->src_addr));
         memcpy(msg.proxy_addr.unix_addr.dst_addr, pp_info->dst_addr, sizeof(pp_info->dst_addr));
     }
-    else if (fam == AF_UNSPEC)
+    else
     {
-        len = 0;
-        if (!pp_info->local)
-        {
-            return NULL;
-        }
+        return NULL;
     }
+    msg.proxy_hdr_v2.fam = fam;
     msg.proxy_hdr_v2.len = htons(len);
 
     /* Serialize the msg */
@@ -323,7 +331,7 @@ uint8_t *pp2_create_msg(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp2_msg
 static uint8_t *pp1_create_msg(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp1_msg_len, int *error)
 {
     char block[PP1_MAX_LENGHT];
-    if (fam == AF_UNIX || (fam != AF_INET && fam != AF_INET6))
+    if (fam != AF_INET && fam != AF_INET6)
     {
         return NULL;
     }
@@ -475,11 +483,11 @@ static int ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
     uint8_t cmd = proxy_hdr->ver_cmd & 0x0f;
     if (cmd == 0x0)
     {
-        pp_info->local = 1;
+        pp_info->v2local = 1;
     }
     else if (cmd == 0x1)
     {
-        pp_info->local = 0;
+        pp_info->v2local = 0;
     }
     else
     {

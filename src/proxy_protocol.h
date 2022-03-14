@@ -50,7 +50,7 @@ typedef struct
 
 typedef struct
 {
-    uint8_t     local; /* 1: LOCAL 0: PROXY */
+    uint8_t     v2local; /* Used only in v2. 1: LOCAL 0: PROXY */
     uint8_t     src_addr[108];
     uint8_t     dst_addr[108];
     uint16_t    src_port;
