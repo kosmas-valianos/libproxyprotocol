@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdbool.h>
 #include <errno.h>
 #include <string.h>
 #include <limits.h>
@@ -93,34 +94,6 @@ typedef struct
 
 #pragma pack()
 
-enum
-{
-    ERR_NULL,
-    ERR_PP_VERSION,
-    ERR_PP2_SIG,
-    ERR_PP2_VERSION,
-    ERR_PP2_CMD,
-    ERR_PP2_TRANSPORT_FAMILY,
-    ERR_PP2_LENGTH,
-    ERR_PP2_IPV4_SRC_IP,
-    ERR_PP2_IPV4_DST_IP,
-    ERR_PP2_IPV6_SRC_IP,
-    ERR_PP2_IPV6_DST_IP,
-    ERR_PP2_TLV_LENGTH,
-    ERR_PP2_TYPE_CRC32C,
-    ERR_PP2_TYPE_AWS,
-    ERR_PP1_CRLF,
-    ERR_PP1_PROXY,
-    ERR_PP1_SPACE,
-    ERR_PP1_TRANSPORT_FAMILY,
-    ERR_PP1_IPV4_SRC_IP,
-    ERR_PP1_IPV4_DST_IP,
-    ERR_PP1_IPV6_SRC_IP,
-    ERR_PP1_IPV6_DST_IP,
-    ERR_PP1_SRC_PORT,
-    ERR_PP1_DST_PORT,
-};
-
 static const char *errors[] = {
     "No error",
     "Invalind PROXY protocol version given. Only 1 and 2 are valid",
@@ -177,7 +150,7 @@ static tlv_t *tlv_new(uint8_t type, uint16_t length, const uint8_t *value)
     return tlv;
 }
 
-static tlv_array_append_tlv(tlv_array_t *tlv_array, tlv_t *tlv)
+static void tlv_array_append_tlv(tlv_array_t *tlv_array, tlv_t *tlv)
 {
     if (!tlv_array->tlvs)
     {
@@ -245,7 +218,7 @@ void pp_info_clear(pp_info_t *pp_info)
     memset(pp_info, 0, sizeof(*pp_info));
 }
 
-uint8_t *pp2_create_msg(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp2_msg_len, int *error)
+uint8_t *pp2_create_msg(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp2_msg_len, uint32_t *error)
 {
     typedef struct
     {
@@ -328,22 +301,31 @@ uint8_t *pp2_create_msg(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp2_msg
     return pp2_msg;
 }
 
-static uint8_t *pp1_create_msg(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp1_msg_len, int *error)
+static uint8_t *pp1_create_msg(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp1_msg_len, uint32_t *error)
 {
-    char block[PP1_MAX_LENGHT];
     if (fam != AF_INET && fam != AF_INET6)
     {
         return NULL;
     }
-    *pp1_msg_len = snprintf(block, sizeof(block), "PROXY %s %s %s %hu %hu%s",
-        fam == AF_INET ? "TCP4" : "TCP6", pp_info->src_addr, pp_info->dst_addr, pp_info->src_port, pp_info->dst_port, crlf);
+    char block[PP1_MAX_LENGHT];
+    /* sprintf() as snprintf does not exist in ANSI C */
+    if (strlen(pp_info->src_addr) > 39 || strlen(pp_info->dst_addr) > 39)
+    {
+        return NULL;
+    }
+    char src_addr[39+1];
+    char dst_addr[39+1];
+    memcpy(src_addr, pp_info->src_addr, sizeof(src_addr));
+    memcpy(dst_addr, pp_info->dst_addr, sizeof(dst_addr));
+    *pp1_msg_len = sprintf(block, "PROXY %s %s %s %hu %hu%s",
+        fam == AF_INET ? "TCP4" : "TCP6", src_addr, dst_addr, pp_info->src_port, pp_info->dst_port, crlf);
     uint8_t *pp1_msg = malloc(*pp1_msg_len);
     memcpy(pp1_msg, block, *pp1_msg_len);
     *error = ERR_NULL;
     return pp1_msg;
 }
 
-uint8_t *pp_create_msg(uint8_t version, uint8_t fam, const pp_info_t *pp_info, uint32_t *pp_msg_len, int *error)
+uint8_t *pp_create_msg(uint8_t version, uint8_t fam, const pp_info_t *pp_info, uint32_t *pp_msg_len, uint32_t *error)
 {
     if (version == 1)
     {
@@ -643,7 +625,6 @@ static int ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
                 return ERR_PP2_TYPE_AWS;
             }
             pp2_tlv_aws_t *pp2_tlv_aws = (pp2_tlv_aws_t *) pp2_tlv->value;
-            uint16_t pp2_tlv_aws_len = pp2_tlv_len - 1;
             /* Connection is done through Private Link/Interface VPC endpoint */
             if (pp2_tlv_aws->type == PP2_SUBTYPE_AWS_VPCE_ID)
             {

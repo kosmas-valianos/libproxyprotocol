@@ -71,19 +71,19 @@ static uint8_t pp_info_equal(const pp_info_t *pp_info_a, const pp_info_t *pp_inf
 
 int main(int argc, char **argv)
 {
-    // Define tests
+    /* Define tests */
     test_t tests[] = {
         {
             .name = "v1 PROXY message: UNKNOWN - short",
-            .raw_bytes_in = "PROXY UNKNOWN\r\n",
-            .raw_bytes_in_length = strlen(tests[0].raw_bytes_in),
-            .rc_expected = strlen(tests[0].raw_bytes_in),
+            .raw_bytes_in = (uint8_t *) "PROXY UNKNOWN\r\n",
+            .raw_bytes_in_length = strlen((char *) tests[0].raw_bytes_in),
+            .rc_expected = strlen((char *) tests[0].raw_bytes_in),
         },
         {
             .name = "v1 PROXY message: UNKNOWN - full",
-            .raw_bytes_in = "PROXY UNKNOWN ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff 65535 65535\r\n",
-            .raw_bytes_in_length = strlen(tests[1].raw_bytes_in),
-            .rc_expected = strlen(tests[1].raw_bytes_in),
+            .raw_bytes_in = (uint8_t *) "PROXY UNKNOWN ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff 65535 65535\r\n",
+            .raw_bytes_in_length = strlen((char *) tests[1].raw_bytes_in),
+            .rc_expected = strlen((char *) tests[1].raw_bytes_in),
         },
         {
             .name = "v2 PROXY message: PROXY, AF_INET, PP2_TYPE_CRC32C, PP2_SUBTYPE_AWS_VPCE_ID",
@@ -140,7 +140,7 @@ int main(int argc, char **argv)
         },
     };
 
-    // Run tests
+    /* Run tests */
     uint32_t i;
     for (i = 0; i < NUM_ELEMS(tests); i++)
     {
@@ -150,14 +150,20 @@ int main(int argc, char **argv)
         if (tests[i].raw_bytes_in)
         {
             rc = pp_parse(tests[i].raw_bytes_in, tests[i].raw_bytes_in_length, &pp_info_out);
-            //uint16_t tlv_value_len;
-            //uint8_t *tlv_value = pp_info_get_tlv_value(&ppv1_info_out, PP2_TYPE_AWS, PP2_SUBTYPE_AWS_VPCE_ID, &tlv_value_len);
+            /*uint16_t tlv_value_len;
+             uint8_t *tlv_value = pp_info_get_tlv_value(&ppv1_info_out, PP2_TYPE_AWS, PP2_SUBTYPE_AWS_VPCE_ID, &tlv_value_len); */
         }
         else
         {
             uint32_t pp_msg_len;
-            int error;
+            uint32_t error;
             uint8_t *pp_msg = pp_create_msg(tests[i].version, tests[i].fam, &tests[i].pp_info_in, &pp_msg_len, &error);
+            if (!pp_msg || error != ERR_NULL)
+            {
+                printf("FAILED\n");
+                pp_info_clear(&pp_info_out);
+                return EXIT_FAILURE;
+            }
             tests[i].rc_expected = pp_msg_len;
             rc = pp_parse(pp_msg, pp_msg_len, &pp_info_out);
             free(pp_msg);

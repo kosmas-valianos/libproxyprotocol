@@ -3,13 +3,40 @@
 
 #include <stdlib.h>
 #include <stdint.h>
-#include <stdbool.h>
 #ifdef _WIN32
     #include <ws2tcpip.h>
     #pragma comment(lib, "ws2_32.lib")
 #else
     #include <arpa/inet.h>
 #endif
+
+enum
+{
+    ERR_NULL,
+    ERR_PP_VERSION,
+    ERR_PP2_SIG,
+    ERR_PP2_VERSION,
+    ERR_PP2_CMD,
+    ERR_PP2_TRANSPORT_FAMILY,
+    ERR_PP2_LENGTH,
+    ERR_PP2_IPV4_SRC_IP,
+    ERR_PP2_IPV4_DST_IP,
+    ERR_PP2_IPV6_SRC_IP,
+    ERR_PP2_IPV6_DST_IP,
+    ERR_PP2_TLV_LENGTH,
+    ERR_PP2_TYPE_CRC32C,
+    ERR_PP2_TYPE_AWS,
+    ERR_PP1_CRLF,
+    ERR_PP1_PROXY,
+    ERR_PP1_SPACE,
+    ERR_PP1_TRANSPORT_FAMILY,
+    ERR_PP1_IPV4_SRC_IP,
+    ERR_PP1_IPV4_DST_IP,
+    ERR_PP1_IPV6_SRC_IP,
+    ERR_PP1_IPV6_DST_IP,
+    ERR_PP1_SRC_PORT,
+    ERR_PP1_DST_PORT,
+};
 
 /* Type-Length-Value (TLV vectors) */
 #define PP2_TYPE_ALPN           0x01
@@ -51,8 +78,8 @@ typedef struct
 typedef struct
 {
     uint8_t     v2local; /* Used only in v2. 1: LOCAL 0: PROXY */
-    uint8_t     src_addr[108];
-    uint8_t     dst_addr[108];
+    char        src_addr[108];
+    char        dst_addr[108];
     uint16_t    src_port;
     uint16_t    dst_port;
     tlv_array_t tlv_array;
@@ -78,7 +105,7 @@ void        pp_info_clear(pp_info_t* pp_info);
  *  \x31 : UNIX stream
  *  \x32 : UNIX datagram
  */
-uint8_t    *pp_create_msg(uint8_t version, uint8_t fam, const pp_info_t *pp_info, uint32_t *pp_msg_len, int *error);
+uint8_t    *pp_create_msg(uint8_t version, uint8_t fam, const pp_info_t *pp_info, uint32_t *pp_msg_len, uint32_t *error);
 
 int         pp_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info);
 
