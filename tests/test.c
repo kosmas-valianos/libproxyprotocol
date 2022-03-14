@@ -44,6 +44,31 @@ uint8_t vpce_msg[] = {
             0x00, 0x00, 0x00, 0x00, /* NOOP TLV end */
 };
 
+static uint8_t pp_info_equal(const pp_info_t *pp_info_a, const pp_info_t *pp_info_b)
+{
+    if (pp_info_a->local != pp_info_b->local)
+    {
+        return 0;
+    }
+    if (strcmp(pp_info_a->src_addr, pp_info_b->src_addr))
+    {
+        return 0;
+    }
+    if (strcmp(pp_info_a->dst_addr, pp_info_b->dst_addr))
+    {
+        return 0;
+    }
+    if (pp_info_a->src_port != pp_info_b->src_port)
+    {
+        return 0;
+    }
+    if (pp_info_a->dst_port != pp_info_b->dst_port)
+    {
+        return 0;
+    }
+    return 1;
+}
+
 int main(int argc, char **argv)
 {
     // Define tests
@@ -61,7 +86,7 @@ int main(int argc, char **argv)
             .rc_expected = strlen(tests[1].raw_bytes_in),
         },
         {
-            .name = "v2 PROXY message: PP2_TYPE_CRC32C, PP2_SUBTYPE_AWS_VPCE_ID",
+            .name = "v2 PROXY message: PROXY, AF_INET, PP2_TYPE_CRC32C, PP2_SUBTYPE_AWS_VPCE_ID",
             .raw_bytes_in = vpce_msg,
             .raw_bytes_in_length = sizeof(vpce_msg),
             .rc_expected = sizeof(vpce_msg),
@@ -73,7 +98,7 @@ int main(int argc, char **argv)
             },
         },
         {
-            .name = "v2 PROXY message: AF_INET create and parse",
+            .name = "v2 PROXY message: PROXY, AF_INET create and parse",
             .version = 2,
             .fam = AF_INET,
             .pp_info_in = {
@@ -97,7 +122,7 @@ int main(int argc, char **argv)
             .pp_info_out_expected = tests[4].pp_info_in,
         },
         {
-            .name = "v2 PROXY message: AF_UNIX create and parse",
+            .name = "v2 PROXY message: PROXY, AF_UNIX create and parse",
             .version = 2,
             .fam = AF_UNIX,
             .pp_info_in = {
@@ -105,6 +130,13 @@ int main(int argc, char **argv)
                 .dst_addr = "/tmp/testsocket2.socket",
             },
             .pp_info_out_expected = tests[5].pp_info_in,
+        },
+        {
+            .name = "v2 PROXY message: LOCAL, AF_UNSPEC create and parse",
+            .version = 2,
+            .fam = '\x00',
+            .pp_info_in = { .local = 1 },
+            .pp_info_out_expected = { .local = 1 },
         },
     };
 
@@ -131,7 +163,7 @@ int main(int argc, char **argv)
             free(pp_msg);
         }
 
-        if (rc != tests[i].rc_expected || memcmp(&pp_info_out, &tests[i].pp_info_out_expected, sizeof(pp_info_t) - sizeof(tlv_array_t)))
+        if (rc != tests[i].rc_expected || !pp_info_equal(&pp_info_out, &tests[i].pp_info_out_expected))
         {
             printf("FAILED\n");
             pp_info_clear(&pp_info_out);

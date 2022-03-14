@@ -50,7 +50,7 @@ typedef struct
 
 typedef struct
 {
-    // TODO maybe is local bool so that caller can quickly ignore
+    uint8_t     local; /* 1: LOCAL 0: PROXY */
     uint8_t     src_addr[108];
     uint8_t     dst_addr[108];
     uint16_t    src_port;
@@ -61,7 +61,25 @@ typedef struct
 const char *pp_strerror(uint32_t error);
 uint8_t    *pp_info_get_tlv_value(const pp_info_t* pp_info, uint8_t type, uint8_t subtype, uint16_t *value_len_out);
 void        pp_info_clear(pp_info_t* pp_info);
+
+/*
+ * version:
+ *  v1 : 1
+ *  v2 : 2
+ * fam - v1:
+ *  AF_INET
+ *  AF_INET6
+ * fam - v2:
+ *  \x00 : UNSPEC
+ *  \x11 : TCP over IPv4
+ *  \x12 : UDP over IPv4
+ *  \x21 : TCP over IPv6
+ *  \x22 : UDP over IPv6
+ *  \x31 : UNIX stream
+ *  \x32 : UNIX datagram
+ */
 uint8_t    *pp_create_msg(uint8_t version, uint8_t fam, const pp_info_t *pp_info, uint32_t *pp_msg_len, int *error);
+
 int         pp_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info);
 
 #endif

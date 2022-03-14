@@ -255,7 +255,7 @@ uint8_t *pp2_create_msg(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp2_msg
 
     proxy_message_v2_t msg = {
             .proxy_hdr_v2.sig = "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A",
-            .proxy_hdr_v2.ver_cmd = '\x21',
+            .proxy_hdr_v2.ver_cmd = pp_info->local ? '\x20' : '\x21',
     };
 
     uint16_t len;
@@ -300,9 +300,13 @@ uint8_t *pp2_create_msg(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp2_msg
         memcpy(msg.proxy_addr.unix_addr.src_addr, pp_info->src_addr, sizeof(pp_info->src_addr));
         memcpy(msg.proxy_addr.unix_addr.dst_addr, pp_info->dst_addr, sizeof(pp_info->dst_addr));
     }
-    else
+    else if (fam == AF_UNSPEC)
     {
-        return NULL;
+        len = 0;
+        if (!pp_info->local)
+        {
+            return NULL;
+        }
     }
     msg.proxy_hdr_v2.len = htons(len);
 
@@ -319,7 +323,7 @@ uint8_t *pp2_create_msg(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp2_msg
 static uint8_t *pp1_create_msg(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp1_msg_len, int *error)
 {
     char block[PP1_MAX_LENGHT];
-    if (fam == AF_UNIX)
+    if (fam == AF_UNIX || (fam != AF_INET && fam != AF_INET6))
     {
         return NULL;
     }
@@ -469,7 +473,15 @@ static int ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
      * \x1 : PROXY
      */
     uint8_t cmd = proxy_hdr->ver_cmd & 0x0f;
-    if (cmd != 0x0 && cmd != 0x1)
+    if (cmd == 0x0)
+    {
+        pp_info->local = 1;
+    }
+    else if (cmd == 0x1)
+    {
+        pp_info->local = 0;
+    }
+    else
     {
         return ERR_PP2_CMD;
     }
@@ -805,11 +817,11 @@ static int ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
 int pp_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
 {
     memset(pp_info, 0, sizeof(*pp_info));
-    if (pktlen > 16 && !memcmp(pkt, "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A\x21", 13))
+    if (pktlen >= 16 && !memcmp(pkt, "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A", 12))
     {
         return ppv2_parse(pkt, pktlen, pp_info);
     }
-    else if (pktlen > 8 && !memcmp(pkt, "\x50\x52\x4F\x58\x59", 5))
+    else if (pktlen >= 8 && !memcmp(pkt, "\x50\x52\x4F\x58\x59", 5))
     {
         return ppv1_parse(pkt, pktlen, pp_info);;
     }
