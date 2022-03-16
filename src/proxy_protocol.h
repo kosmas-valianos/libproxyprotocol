@@ -130,7 +130,7 @@ void        pp_info_clear(pp_info_t *pp_info);
  *  \x31 : UNIX stream
  *  \x32 : UNIX datagram
  */
-uint8_t    *pp_create_msg(uint8_t version, uint8_t fam, const pp_info_t *pp_info, uint32_t *pp_msg_len, uint32_t *error);
+uint8_t    *pp_create_hdr(uint8_t version, uint8_t fam, const pp_info_t *pp_info, uint32_t *pp_hdr_len, uint32_t *error);
 
 int         pp_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info);
 

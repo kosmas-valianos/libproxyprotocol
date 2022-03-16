@@ -120,31 +120,31 @@ typedef struct
 
 static const char *errors[] = {
     "No error",
-    "Invalind PROXY protocol version given. Only 1 and 2 are valid",
-    "Invalid v2 PROXY message: wrong protocol signature",
-    "Invalid v2 PROXY message: wrong protocol version",
-    "Invalid v2 PROXY message: wrong command",
-    "Invalid v2 PROXY message: wrong transport protocol or address family",
-    "Invalid v2 PROXY message: length",
-    "Invalid v2 PROXY message: invalid IPv4 src IP",
-    "Invalid v2 PROXY message: invalid IPv4 dst IP"
-    "Invalid v2 PROXY message: invalid IPv6 src IP",
-    "Invalid v2 PROXY message: invalid IPv6 dst IP",
-    "Invalid v2 PROXY message: invalid TLV vector's length",
-    "Invalid v2 PROXY message: invalid PP2_TYPE_CRC32C",
-    "Invalid v2 PROXY message: invalid PP2_TYPE_UNIQUE_ID",
-    "Invalid v2 PROXY message: invalid PP2_TYPE_AWS",
-    "Invalid v2 PROXY message: invalid PP2_TYPE_AZURE",
-    "Invalid v1 PROXY message: \"\\r\\n\" is missing",
-    "Invalid v1 PROXY message: \"PROXY\" is missing",
-    "Invalid v1 PROXY message: space is missing",
-    "Invalid v1 PROXY message: wrong transport protocol or address family",
-    "Invalid v1 PROXY message: invalid IPv4 src IP",
-    "Invalid v1 PROXY message: invalid IPv4 dst IP"
-    "Invalid v1 PROXY message: invalid IPv6 src IP",
-    "Invalid v1 PROXY message: invalid IPv6 dst IP",
-    "Invalid v1 PROXY message: invalid src port",
-    "Invalid v1 PROXY message: invalid dst port",
+    "Invalid PROXY protocol version given. Only 1 and 2 are valid",
+    "v2 PROXY protocol header: wrong signature",
+    "v2 PROXY protocol header: wrong version",
+    "v2 PROXY protocol header: wrong command",
+    "v2 PROXY protocol header: wrong transport protocol or address family",
+    "v2 PROXY protocol header: length",
+    "v2 PROXY protocol header: invalid IPv4 src IP",
+    "v2 PROXY protocol header: invalid IPv4 dst IP"
+    "v2 PROXY protocol header: invalid IPv6 src IP",
+    "v2 PROXY protocol header: invalid IPv6 dst IP",
+    "v2 PROXY protocol header: invalid TLV vector's length",
+    "v2 PROXY protocol header: invalid PP2_TYPE_CRC32C",
+    "v2 PROXY protocol header: invalid PP2_TYPE_UNIQUE_ID",
+    "v2 PROXY protocol header: invalid PP2_TYPE_AWS",
+    "v2 PROXY protocol header: invalid PP2_TYPE_AZURE",
+    "v1 PROXY protocol header: \"\\r\\n\" is missing",
+    "v1 PROXY protocol header: \"PROXY\" is missing",
+    "v1 PROXY protocol header: space is missing",
+    "v1 PROXY protocol header: wrong transport protocol or address family",
+    "v1 PROXY protocol header: invalid IPv4 src IP",
+    "v1 PROXY protocol header: invalid IPv4 dst IP"
+    "v1 PROXY protocol header: invalid IPv6 src IP",
+    "v1 PROXY protocol header: invalid IPv6 dst IP",
+    "v1 PROXY protocol header: invalid src port",
+    "v1 PROXY protocol header: invalid dst port",
 };
 
 const char *pp_strerror(uint32_t error)
@@ -245,25 +245,21 @@ void pp_info_clear(pp_info_t *pp_info)
     memset(pp_info, 0, sizeof(*pp_info));
 }
 
-uint8_t *pp2_create_msg(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp2_msg_len, uint32_t *error)
+uint8_t *pp2_create_hdr(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp2_hdr_len, uint32_t *error)
 {
-    typedef struct
-    {
-        proxy_hdr_v2_t proxy_hdr_v2;
-        proxy_addr_t   proxy_addr;
-    } proxy_message_v2_t;
-
-    proxy_message_v2_t msg = {
-            .proxy_hdr_v2.sig = "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A",
-            .proxy_hdr_v2.ver_cmd = pp_info->v2local ? '\x20' : '\x21',
+    proxy_hdr_v2_t proxy_hdr_v2 = {
+        .sig = "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A",
+        .ver_cmd = pp_info->v2local ? '\x20' : '\x21',
     };
 
-    uint16_t len;
     uint8_t transport_protocol = fam & 0x0f;
     if (transport_protocol != 0x0 && transport_protocol != 0x1 && transport_protocol != 0x2)
     {
         return NULL;
     }
+
+    uint16_t len;
+    proxy_addr_t proxy_addr;
     uint8_t address_family = fam >> 4;
     if (address_family == 0x0)
     {
@@ -276,64 +272,65 @@ uint8_t *pp2_create_msg(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp2_msg
     else if (address_family == 0x1)
     {
         len = 12;
-        if (inet_pton(AF_INET, pp_info->src_addr, &msg.proxy_addr.ipv4_addr.src_addr) != 1)
+        if (inet_pton(AF_INET, pp_info->src_addr, &proxy_addr.ipv4_addr.src_addr) != 1)
         {
             *error = ERR_PP2_IPV4_SRC_IP;
             return NULL;
         }
-        if (inet_pton(AF_INET, pp_info->dst_addr, &msg.proxy_addr.ipv4_addr.dst_addr) != 1)
+        if (inet_pton(AF_INET, pp_info->dst_addr, &proxy_addr.ipv4_addr.dst_addr) != 1)
         {
             *error = ERR_PP2_IPV4_DST_IP;
             return NULL;
         }
-        msg.proxy_addr.ipv4_addr.src_port = htons(pp_info->src_port);
-        msg.proxy_addr.ipv4_addr.dst_port = htons(pp_info->dst_port);
+        proxy_addr.ipv4_addr.src_port = htons(pp_info->src_port);
+        proxy_addr.ipv4_addr.dst_port = htons(pp_info->dst_port);
     }
     else if (address_family == 0x2)
     {
         len = 36;
-        if (inet_pton(AF_INET6, pp_info->src_addr, &msg.proxy_addr.ipv6_addr.src_addr) != 1)
+        if (inet_pton(AF_INET6, pp_info->src_addr, &proxy_addr.ipv6_addr.src_addr) != 1)
         {
             *error = ERR_PP2_IPV6_SRC_IP;
             return NULL;
         }
-        if (inet_pton(AF_INET6, pp_info->dst_addr, &msg.proxy_addr.ipv6_addr.dst_addr) != 1)
+        if (inet_pton(AF_INET6, pp_info->dst_addr, &proxy_addr.ipv6_addr.dst_addr) != 1)
         {
             *error = ERR_PP2_IPV6_DST_IP;
             return NULL;
         }
-        msg.proxy_addr.ipv6_addr.src_port = htons(pp_info->src_port);
-        msg.proxy_addr.ipv6_addr.dst_port = htons(pp_info->dst_port);
+        proxy_addr.ipv6_addr.src_port = htons(pp_info->src_port);
+        proxy_addr.ipv6_addr.dst_port = htons(pp_info->dst_port);
     }
     else if (address_family == 0x3)
     {
         len = 216;
-        memcpy(msg.proxy_addr.unix_addr.src_addr, pp_info->src_addr, sizeof(pp_info->src_addr));
-        memcpy(msg.proxy_addr.unix_addr.dst_addr, pp_info->dst_addr, sizeof(pp_info->dst_addr));
+        memcpy(proxy_addr.unix_addr.src_addr, pp_info->src_addr, sizeof(pp_info->src_addr));
+        memcpy(proxy_addr.unix_addr.dst_addr, pp_info->dst_addr, sizeof(pp_info->dst_addr));
     }
     else
     {
         return NULL;
     }
-    msg.proxy_hdr_v2.fam = fam;
-    msg.proxy_hdr_v2.len = htons(len);
+    proxy_hdr_v2.fam = fam;
+    proxy_hdr_v2.len = htons(len);
 
-    /* Serialize the msg */
-    *pp2_msg_len = sizeof(proxy_hdr_v2_t) + len;
-    uint8_t *pp2_msg = malloc(*pp2_msg_len);
-    memcpy(pp2_msg, &msg.proxy_hdr_v2, sizeof(proxy_hdr_v2_t));
-    memcpy(pp2_msg + sizeof(proxy_hdr_v2_t), &msg.proxy_addr, len);
+    /* Create the PROXY protocol header */
+    *pp2_hdr_len = sizeof(proxy_hdr_v2_t) + len;
+    uint8_t *pp2_hdr = malloc(*pp2_hdr_len);
+    memcpy(pp2_hdr, &proxy_hdr_v2, sizeof(proxy_hdr_v2_t));
+    memcpy(pp2_hdr + sizeof(proxy_hdr_v2_t), &proxy_addr, len);
 
     *error = ERR_NULL;
-    return pp2_msg;
+    return pp2_hdr;
 }
 
-static uint8_t *pp1_create_msg(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp1_msg_len, uint32_t *error)
+static uint8_t *pp1_create_hdr(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp1_hdr_len, uint32_t *error)
 {
     if (fam != AF_INET && fam != AF_INET6)
     {
         return NULL;
     }
+
     char block[PP1_MAX_LENGHT];
     /* sprintf() as snprintf does not exist in ANSI C */
     if (strlen(pp_info->src_addr) > 39 || strlen(pp_info->dst_addr) > 39)
@@ -344,23 +341,25 @@ static uint8_t *pp1_create_msg(uint8_t fam, const pp_info_t *pp_info, uint32_t *
     char dst_addr[39+1];
     memcpy(src_addr, pp_info->src_addr, sizeof(src_addr));
     memcpy(dst_addr, pp_info->dst_addr, sizeof(dst_addr));
-    *pp1_msg_len = sprintf(block, "PROXY %s %s %s %hu %hu%s",
+    *pp1_hdr_len = sprintf(block, "PROXY %s %s %s %hu %hu%s",
         fam == AF_INET ? "TCP4" : "TCP6", src_addr, dst_addr, pp_info->src_port, pp_info->dst_port, crlf);
-    uint8_t *pp1_msg = malloc(*pp1_msg_len);
-    memcpy(pp1_msg, block, *pp1_msg_len);
+    
+    /* Create the PROXY protocol header */
+    uint8_t *pp1_hdr = malloc(*pp1_hdr_len);
+    memcpy(pp1_hdr, block, *pp1_hdr_len);
     *error = ERR_NULL;
-    return pp1_msg;
+    return pp1_hdr;
 }
 
-uint8_t *pp_create_msg(uint8_t version, uint8_t fam, const pp_info_t *pp_info, uint32_t *pp_msg_len, uint32_t *error)
+uint8_t *pp_create_hdr(uint8_t version, uint8_t fam, const pp_info_t *pp_info, uint32_t *pp_hdr_len, uint32_t *error)
 {
     if (version == 1)
     {
-        return pp1_create_msg(fam, pp_info, pp_msg_len, error);
+        return pp1_create_hdr(fam, pp_info, pp_hdr_len, error);
     }
     else if (version == 2)
     {
-        return pp2_create_msg(fam, pp_info, pp_msg_len, error);
+        return pp2_create_hdr(fam, pp_info, pp_hdr_len, error);
     }
     else
     {
@@ -466,21 +465,21 @@ static uint32_t crc32c(const uint8_t *buf, uint32_t len)
     return crc^0xffffffff;
 }
 
-/* Verifies and parses a version 2 PROXY message */
+/* Verifies and parses a version 2 PROXY protocol header */
 static int ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
 {
-    uint8_t *proxy_msg = pkt;
-    proxy_hdr_v2_t *proxy_hdr = (proxy_hdr_v2_t *) pkt;
+    const uint8_t *ppv2_hdr = pkt;
+    const proxy_hdr_v2_t *proxy_hdr_v2 = (proxy_hdr_v2_t *) pkt;
 
     /* Constant 12 bytes block containing the protocol signature */
-    if (memcmp(proxy_hdr->sig, "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A", sizeof(proxy_hdr->sig)))
+    if (memcmp(proxy_hdr_v2->sig, "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A", sizeof(proxy_hdr_v2->sig)))
     {
         return ERR_PP2_SIG;
     }
 
     /* The next byte (the 13th one) is the protocol version and command */
     /* The highest four bits contains the version. Only \x2 is accepted */
-    uint8_t version = proxy_hdr->ver_cmd >> 4;
+    uint8_t version = proxy_hdr_v2->ver_cmd >> 4;
     if (version != 0x2)
     {
         return ERR_PP2_VERSION;
@@ -489,7 +488,7 @@ static int ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
      * \x0 : LOCAL
      * \x1 : PROXY
      */
-    uint8_t cmd = proxy_hdr->ver_cmd & 0x0f;
+    uint8_t cmd = proxy_hdr_v2->ver_cmd & 0x0f;
     if (cmd == 0x0)
     {
         pp_info->v2local = 1;
@@ -514,19 +513,19 @@ static int ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
      * \x32 : UNIX datagram
      */
     uint8_t fam;
-    if (proxy_hdr->fam == '\x00' || cmd == 0x0)
+    if (proxy_hdr_v2->fam == '\x00' || cmd == 0x0)
     {
         fam = AF_UNSPEC;
     }
-    else if (proxy_hdr->fam == '\x11' || proxy_hdr->fam == '\x12')
+    else if (proxy_hdr_v2->fam == '\x11' || proxy_hdr_v2->fam == '\x12')
     {
         fam = AF_INET;
     }
-    else if (proxy_hdr->fam == '\x21' || proxy_hdr->fam == '\x22')
+    else if (proxy_hdr_v2->fam == '\x21' || proxy_hdr_v2->fam == '\x22')
     {
         fam = AF_INET6;
     }
-    else if (proxy_hdr->fam == '\x31' || proxy_hdr->fam == '\x32')
+    else if (proxy_hdr_v2->fam == '\x31' || proxy_hdr_v2->fam == '\x32')
     {
         fam = AF_UNIX;
     }
@@ -536,7 +535,7 @@ static int ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
     }
 
     /* The 15th and 16th bytes is the address length in bytes in network byte order */
-    uint16_t len = ntohs(proxy_hdr->len);
+    uint16_t len = ntohs(proxy_hdr_v2->len);
     if (pktlen < sizeof(proxy_hdr_v2_t) + len)
     {
         return ERR_PP2_LENGTH;
@@ -641,7 +640,7 @@ static int ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
             crc32c_chksum = ntohl(crc32c_chksum);
 
             memset(pp2_tlv->value, 0, pp2_tlv_len);
-            uint32_t crc32c_calculated = crc32c(proxy_msg, sizeof(proxy_hdr_v2_t) + len);
+            uint32_t crc32c_calculated = crc32c(ppv2_hdr, sizeof(proxy_hdr_v2_t) + len);
             if (crc32c_chksum != crc32c_calculated)
             {
                 return ERR_PP2_TYPE_CRC32C;
@@ -707,7 +706,6 @@ static int ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
     return sizeof(proxy_hdr_v2_t) + len;
 }
 
-/* Verifies and parses a version 1 PROXY message */
 static int ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
 {
     char block[PP1_MAX_LENGHT] = { 0 };

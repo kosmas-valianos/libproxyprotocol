@@ -44,7 +44,7 @@ typedef struct
 } test_t;
 
 /* https://github.com/aws/elastic-load-balancing-tools/blob/c8eee30ab991ab4c57dc37d1c58f09f67bd534aa/proprot/tst/com/amazonaws/proprot/Compatibility_AwsNetworkLoadBalancerTest.java#L41..L67 */
-uint8_t pp2_msg_vpce[] = {
+uint8_t pp2_hdr_vpce[] = {
             0x0d, 0x0a, 0x0d, 0x0a, /* Start of Sig */
             0x00, 0x0d, 0x0a, 0x51,
             0x55, 0x49, 0x54, 0x0a, /* End of Sig */
@@ -121,22 +121,22 @@ int main()
     /* Define tests */
     test_t tests[] = {
         {
-            .name = "v1 PROXY message: UNKNOWN - short",
+            .name = "v1 PROXY protocol header: UNKNOWN - short",
             .raw_bytes_in = (uint8_t *) "PROXY UNKNOWN\r\n",
             .raw_bytes_in_length = strlen((char*)tests[0].raw_bytes_in),
             .rc_expected = strlen((char*)tests[0].raw_bytes_in),
         },
         {
-            .name = "v1 PROXY message: UNKNOWN - full",
+            .name = "v1 PROXY protocol header: UNKNOWN - full",
             .raw_bytes_in = (uint8_t *) "PROXY UNKNOWN ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff 65535 65535\r\n",
             .raw_bytes_in_length = strlen((char *) tests[1].raw_bytes_in),
             .rc_expected = strlen((char *) tests[1].raw_bytes_in),
         },
         {
-            .name = "v2 PROXY message: PROXY, AF_INET, PP2_TYPE_CRC32C, PP2_TYPE_AWS(PP2_SUBTYPE_AWS_VPCE_ID)",
-            .raw_bytes_in = pp2_msg_vpce,
-            .raw_bytes_in_length = sizeof(pp2_msg_vpce),
-            .rc_expected = sizeof(pp2_msg_vpce),
+            .name = "v2 PROXY protocol header: PROXY, AF_INET, PP2_TYPE_CRC32C, PP2_TYPE_AWS(PP2_SUBTYPE_AWS_VPCE_ID)",
+            .raw_bytes_in = pp2_hdr_vpce,
+            .raw_bytes_in_length = sizeof(pp2_hdr_vpce),
+            .rc_expected = sizeof(pp2_hdr_vpce),
             .pp_info_out_expected = {
                 .src_addr = "172.31.7.113",
                 .dst_addr = "172.31.10.31",
@@ -158,7 +158,7 @@ int main()
             },
         },
         {
-            .name = "v2 PROXY message: PROXY, AF_INET create and parse",
+            .name = "v2 PROXY protocol header: PROXY, AF_INET create and parse",
             .version = 2,
             .fam = '\x11',
             .pp_info_in = {
@@ -170,7 +170,7 @@ int main()
             .pp_info_out_expected = tests[3].pp_info_in,
         },
         {
-            .name = "v1 PROXY message: AF_INET create and parse",
+            .name = "v1 PROXY protocol header: AF_INET create and parse",
             .version = 1,
             .fam = AF_INET,
             .pp_info_in = {
@@ -182,7 +182,7 @@ int main()
             .pp_info_out_expected = tests[4].pp_info_in,
         },
         {
-            .name = "v2 PROXY message: PROXY, AF_UNIX create and parse",
+            .name = "v2 PROXY protocol header: PROXY, AF_UNIX create and parse",
             .version = 2,
             .fam = '\x31',
             .pp_info_in = {
@@ -192,7 +192,7 @@ int main()
             .pp_info_out_expected = tests[5].pp_info_in,
         },
         {
-            .name = "v2 PROXY message: LOCAL, AF_UNSPEC create and parse",
+            .name = "v2 PROXY protocol header: LOCAL, AF_UNSPEC create and parse",
             .version = 2,
             .fam = '\x00',
             .pp_info_in = { .v2local = 1 },
@@ -213,18 +213,18 @@ int main()
         }
         else
         {
-            uint32_t pp_msg_len;
+            uint32_t pp_hdr_len;
             uint32_t error;
-            uint8_t *pp_msg = pp_create_msg(tests[i].version, tests[i].fam, &tests[i].pp_info_in, &pp_msg_len, &error);
-            if (!pp_msg || error != ERR_NULL)
+            uint8_t *pp_hdr = pp_create_hdr(tests[i].version, tests[i].fam, &tests[i].pp_info_in, &pp_hdr_len, &error);
+            if (!pp_hdr || error != ERR_NULL)
             {
                 printf("FAILED\n");
                 pp_info_clear(&pp_info_out);
                 return EXIT_FAILURE;
             }
-            tests[i].rc_expected = pp_msg_len;
-            rc = pp_parse(pp_msg, pp_msg_len, &pp_info_out);
-            free(pp_msg);
+            tests[i].rc_expected = pp_hdr_len;
+            rc = pp_parse(pp_hdr, pp_hdr_len, &pp_info_out);
+            free(pp_hdr);
         }
 
         if (rc != tests[i].rc_expected || !pp_info_equal(&pp_info_out, &tests[i].pp_info_out_expected) || !pp_verify_tlvs(&pp_info_out, &tests[i].expected_tlvs))

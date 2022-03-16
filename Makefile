@@ -20,23 +20,23 @@ CFLAGS := -Wall -Wextra -Wshadow -ansi -fshort-enums -fpic
 
 all: build
 
-build: libs_dir libs/libpp.so
+build: libs_dir libs/libproxyprotocol.so
 
 libs_dir:
 	mkdir -p libs
 
-libs/libpp.so: src/proxy_protocol.o
+libs/libproxyprotocol.so: src/proxy_protocol.o
 	$(CC) -shared -o $@ $+
 
 src/%.o: %.c src/proxy_protocol.h
 	$(CC) ${CFLAGS} -c -o $@ $<
 
-tests: tests/testlibpp
+tests: tests/test_libproxyprotocol
 	LD_LIBRARY_PATH=libs/ $<
 
-tests/testlibpp: tests/test.o libs/libpp.so
-	$(CC) -Llibs/ ${CFLAGS} -o $@ $< -lpp
+tests/test_libproxyprotocol: tests/test.o libs/libproxyprotocol.so
+	$(CC) -Llibs/ ${CFLAGS} -o $@ $< -lproxyprotocol
 
 clean:
-	$(RM) src/*.o libs/libpp.so
-	$(RM) tests/test.o
+	$(RM) src/*.o libs/libproxyprotocol.so
+	$(RM) tests/*.o tests/test_libproxyprotocol
