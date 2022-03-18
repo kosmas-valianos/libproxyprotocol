@@ -18,7 +18,7 @@ You shall not pass your `pp_info_t` variable to `pp_parse()` again without first
 To extract TLVs' values it is strongly suggested that you use `pp_info_get_tlv_value()` with the following parameters:
 * `pp_info_t *pp_info`: The `pp_info_t` used in the `pp_parse()`
 * `uint8_t type`: The type of the TLV you are looking for as per the specification e.g. PP2_TYPE_AWS, PP2_TYPE_AZURE etc.
-* `uint8_t subtype`: The subtype of the TLV you are looking for (in case it is needed or just a value <= 0 to be ignored) as per the specification e.g. PP2_SUBTYPE_AWS_VPCE_ID, PP2_SUBTYPE_AZURE_PRIVATEENDPOINT_LINKID
+* `uint8_t subtype`: The subtype of the TLV you are looking for (in case it is needed else 0 to get it ignored) as per the specification e.g. PP2_SUBTYPE_AWS_VPCE_ID, PP2_SUBTYPE_AZURE_PRIVATEENDPOINT_LINKID
 * `uint16_t *value_len_out`: The length of the value so that applications can copy and use the value properly
 * `return value: uint8_t *`: Pointer to the value. In case the value is a string e.g. PP2_TYPE_AWS-PP2_SUBTYPE_AWS_VPCE_ID thenthe buffer is NULL terminated so that it can be used directly for string operations like `strcmp()` etc. **Do not manipulate these data in any way, rather make copies of them if you need to modify them.**
 
