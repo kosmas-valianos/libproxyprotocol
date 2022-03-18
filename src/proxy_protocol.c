@@ -148,6 +148,7 @@ static const char *errors[] = {
     "v1 PROXY protocol header: invalid IPv6 dst IP",
     "v1 PROXY protocol header: invalid src port",
     "v1 PROXY protocol header: invalid dst port",
+    "Heap memory allocation failure",
 };
 
 const char *pp_strerror(int32_t error)
@@ -173,29 +174,43 @@ static uint8_t parse_port(const char *value, uint16_t *usport)
 static tlv_t *tlv_new(uint8_t type, uint16_t length, const void *value)
 {
     tlv_t *tlv = malloc(sizeof(tlv_t) - 1 + length);
+    if (!tlv)
+    {
+        return NULL;
+    }
     tlv->type = type;
     tlv->length = length;
     memcpy(tlv->value, value, length);
     return tlv;
 }
 
-static void tlv_array_append_tlv(tlv_array_t *tlv_array, tlv_t *tlv)
+static uint8_t tlv_array_append_tlv(tlv_array_t *tlv_array, tlv_t *tlv)
 {
     if (!tlv_array->tlvs)
     {
         tlv_array->len = 0;
         tlv_array->size = 10;
         tlv_array->tlvs = malloc(tlv_array->size * sizeof(tlv_t*));
+        if (!tlv_array->tlvs)
+        {
+            return 0;
+        }
     }
 
     if (tlv_array->size == tlv_array->len)
     {
         tlv_array->size += 5;
-        tlv_array->tlvs = realloc(tlv_array->tlvs, tlv_array->size * sizeof(tlv_t*));
+        tlv_t **tlvs = realloc(tlv_array->tlvs, tlv_array->size * sizeof(tlv_t*));
+        if (!tlvs)
+        {
+            return 0;
+        }
+        tlv_array->tlvs = tlvs;
     }
 
     tlv_array->len++;
     tlv_array->tlvs[tlv_array->len - 1] = tlv;
+    return 1;
 }
 
 static void tlv_array_clear(tlv_array_t *tlv_array)
@@ -323,6 +338,11 @@ uint8_t *pp2_create_hdr(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp2_hdr
     /* Create the PROXY protocol header */
     *pp2_hdr_len = sizeof(proxy_hdr_v2_t) + len;
     uint8_t *pp2_hdr = malloc(*pp2_hdr_len);
+    if (!pp2_hdr)
+    {
+        *error = ERR_HEAP_ALLOC;
+        return NULL;
+    }
     memcpy(pp2_hdr, &proxy_hdr_v2, sizeof(proxy_hdr_v2_t));
     memcpy(pp2_hdr + sizeof(proxy_hdr_v2_t), &proxy_addr, len);
 
@@ -334,13 +354,20 @@ static uint8_t *pp1_create_hdr(uint8_t fam, const pp_info_t *pp_info, uint32_t *
 {
     if (fam != AF_INET && fam != AF_INET6)
     {
+        *error = ERR_PP1_TRANSPORT_FAMILY;
         return NULL;
     }
 
     char block[PP1_MAX_LENGHT];
     /* sprintf() as snprintf does not exist in ANSI C */
-    if (strlen(pp_info->src_addr) > 39 || strlen(pp_info->dst_addr) > 39)
+    if (strlen(pp_info->src_addr) > 39)
     {
+        *error = ERR_PP1_IPV4_SRC_IP;
+        return NULL;
+    }
+    if (strlen(pp_info->dst_addr) > 39)
+    {
+        *error = ERR_PP1_IPV4_DST_IP;
         return NULL;
     }
     char src_addr[39+1];
@@ -352,6 +379,11 @@ static uint8_t *pp1_create_hdr(uint8_t fam, const pp_info_t *pp_info, uint32_t *
     
     /* Create the PROXY protocol header */
     uint8_t *pp1_hdr = malloc(*pp1_hdr_len);
+    if (!pp1_hdr)
+    {
+        *error = ERR_HEAP_ALLOC;
+        return NULL;
+    }
     memcpy(pp1_hdr, block, *pp1_hdr_len);
     *error = ERR_NULL;
     return pp1_hdr;
@@ -623,7 +655,10 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
         case PP2_TYPE_ALPN:
         {
             tlv_t *tlv = tlv_new(pp2_tlv->type, pp2_tlv_len, pp2_tlv->value);
-            tlv_array_append_tlv(&pp_info->tlv_array, tlv);
+            if (!tlv || !tlv_array_append_tlv(&pp_info->tlv_array, tlv))
+            {
+                return ERR_HEAP_ALLOC;
+            }
             break;
         }
         case PP2_TYPE_AUTHORITY:
@@ -631,8 +666,11 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
         {
             /* +1 to save it as a string */
             tlv_t *tlv = tlv_new(pp2_tlv->type, pp2_tlv_len + 1, pp2_tlv->value);
+            if (!tlv || !tlv_array_append_tlv(&pp_info->tlv_array, tlv))
+            {
+                return ERR_HEAP_ALLOC;
+            }
             tlv->value[pp2_tlv_len] = '\0';
-            tlv_array_append_tlv(&pp_info->tlv_array, tlv);
             break;
         }
         case PP2_TYPE_CRC32C:
@@ -657,7 +695,10 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
             }
 
             tlv_t *tlv = tlv_new(pp2_tlv->type, pp2_tlv_len, &crc32c_chksum);
-            tlv_array_append_tlv(&pp_info->tlv_array, tlv);
+            if (!tlv || !tlv_array_append_tlv(&pp_info->tlv_array, tlv))
+            {
+                return ERR_HEAP_ALLOC;
+            }
             break;
         }
         case PP2_TYPE_NOOP:
@@ -669,7 +710,10 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
                 return ERR_PP2_TYPE_UNIQUE_ID;
             }
             tlv_t *tlv = tlv_new(pp2_tlv->type, pp2_tlv_len, pp2_tlv->value);
-            tlv_array_append_tlv(&pp_info->tlv_array, tlv);
+            if (!tlv || !tlv_array_append_tlv(&pp_info->tlv_array, tlv))
+            {
+                return ERR_HEAP_ALLOC;
+            }
             break;
         }
         case PP2_TYPE_SSL:
@@ -686,8 +730,11 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
             {
                 /* +1 to save it as a string. Example: \x1vpce-08d2bf15fac5001c9 */
                 tlv_t *tlv = tlv_new(pp2_tlv->type, pp2_tlv_len + 1, pp2_tlv->value);
+                if (!tlv || !tlv_array_append_tlv(&pp_info->tlv_array, tlv))
+                {
+                    return ERR_HEAP_ALLOC;
+                }
                 tlv->value[pp2_tlv_len] = '\0';
-                tlv_array_append_tlv(&pp_info->tlv_array, tlv);
             }
             break;
         }
@@ -702,7 +749,10 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
             if (pp2_tlv_azure->type == PP2_TYPE_AZURE)
             {
                 tlv_t *tlv = tlv_new(pp2_tlv->type, pp2_tlv_len, pp2_tlv->value);
-                tlv_array_append_tlv(&pp_info->tlv_array, tlv);
+                if (!tlv || !tlv_array_append_tlv(&pp_info->tlv_array, tlv))
+                {
+                    return ERR_HEAP_ALLOC;
+                }
             }
             break;
         }

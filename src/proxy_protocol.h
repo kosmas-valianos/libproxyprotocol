@@ -49,6 +49,7 @@ enum
     ERR_PP1_IPV6_DST_IP      = -23,
     ERR_PP1_SRC_PORT         = -24,
     ERR_PP1_DST_PORT         = -25,
+    ERR_HEAP_ALLOC           = -26,
 };
 
 /* Type-Length-Value (TLV vectors) */
