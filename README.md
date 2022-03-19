@@ -1,6 +1,9 @@
 # libproxyprotocol
 An ANSI C library to parse and create [PROXY protocol](https://www.haproxy.org/download/2.6/doc/proxy-protocol.txt) v1 and v2 headers
->The PROXY protocol provides a convenient way to safely transport connection information such as a client's address across multiple layers of NAT or TCP proxies. It is designed to require little changes to existing components and to limit the performance impact caused by the processing of the transported information.
+* Full specification coverage of all the v2 TLVs, including the custom ones from AWS and Azure
+* Easy access of the values of the extracted v2 TLVs though the API. In case the v2 TLV values are US-ASCII string name, they are given as proper NULL terminated strings for easy usage.
+* Socket free logic. Does not hook, manipulate, assume any networking. It merely works on buffers.
+* Compilable with most compilers and usable at any platform as it is written in ANSI C.
 
 ## Installation
 The library should be compilable to any platform as it is written in ANSI C. It comes with a Makefile which can create the shared library `libproxyprotocol.so` which can then be linked to your application. Special care has been taken to make it work with Windows as well. In that case you have to compile it to a DLL yourself. In case of windows remember that you have to link with the `ws2_32.lib`. An example of this is shown in tests.
@@ -50,7 +53,6 @@ To create a PROXY protocol header you need to use `pp_create_hdr()` with the fol
 ## Example
 See `examples/client_server.c`
 
-## Limitations
-* Creating v2 PROXY protocol headers with TLVs is not yet supported. Will be added in the next release 1.0.0
-* Parsing `PP2_TYPE_SSL` TLV of the v2 PROXY protocol header is not yet supported. TLVs of this type will not be saved in the `pp_info_t` structure. Will be added in the next release 1.0.0
-* The library is not heavily tested. Much more test coverage will be added in the next release 1.0.0
+## In progress
+* Parsing `PP2_TYPE_SSL` TLV of the v2 PROXY protocol header is not yet supported. TLVs of this type will not be saved in the `pp_info_t` structure. Will be added in the next release. Draft PR https://github.com/kosmas-valianos/libproxyprotocol/pull/5
+* Creating v2 PROXY protocol headers with TLVs is not yet supported. Will be added in the next release
