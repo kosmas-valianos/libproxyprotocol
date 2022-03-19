@@ -36,20 +36,21 @@ enum
     ERR_PP2_IPV6_DST_IP      = -10,
     ERR_PP2_TLV_LENGTH       = -11,
     ERR_PP2_TYPE_CRC32C      = -12,
-    ERR_PP2_TYPE_UNIQUE_ID   = -13,
-    ERR_PP2_TYPE_AWS         = -14,
-    ERR_PP2_TYPE_AZURE       = -15,
-    ERR_PP1_CRLF             = -16,
-    ERR_PP1_PROXY            = -17,
-    ERR_PP1_SPACE            = -18,
-    ERR_PP1_TRANSPORT_FAMILY = -19,
-    ERR_PP1_IPV4_SRC_IP      = -20,
-    ERR_PP1_IPV4_DST_IP      = -21,
-    ERR_PP1_IPV6_SRC_IP      = -22,
-    ERR_PP1_IPV6_DST_IP      = -23,
-    ERR_PP1_SRC_PORT         = -24,
-    ERR_PP1_DST_PORT         = -25,
-    ERR_HEAP_ALLOC           = -26,
+    ERR_PP2_TYPE_SSL         = -13,
+    ERR_PP2_TYPE_UNIQUE_ID   = -14,
+    ERR_PP2_TYPE_AWS         = -15,
+    ERR_PP2_TYPE_AZURE       = -16,
+    ERR_PP1_CRLF             = -17,
+    ERR_PP1_PROXY            = -18,
+    ERR_PP1_SPACE            = -19,
+    ERR_PP1_TRANSPORT_FAMILY = -20,
+    ERR_PP1_IPV4_SRC_IP      = -21,
+    ERR_PP1_IPV4_DST_IP      = -22,
+    ERR_PP1_IPV6_SRC_IP      = -23,
+    ERR_PP1_IPV6_DST_IP      = -24,
+    ERR_PP1_SRC_PORT         = -25,
+    ERR_PP1_DST_PORT         = -26,
+    ERR_HEAP_ALLOC           = -27,
 };
 
 /* Type-Length-Value (TLV vectors) */
@@ -69,7 +70,7 @@ enum
 #define PP2_TYPE_AWS            0xEA
 #define PP2_TYPE_AZURE          0xEE
 
-/* PP2_TYPE_SSL subtypes */
+/* PP2_TYPE_SSL <client> bit field  */
 #define PP2_CLIENT_SSL           0x01
 #define PP2_CLIENT_CERT_CONN     0x02
 #define PP2_CLIENT_CERT_SESS     0x04

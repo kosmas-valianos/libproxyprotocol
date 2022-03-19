@@ -135,6 +135,7 @@ static const char *errors[] = {
     "v2 PROXY protocol header: invalid IPv6 dst IP",
     "v2 PROXY protocol header: invalid TLV vector's length",
     "v2 PROXY protocol header: invalid PP2_TYPE_CRC32C",
+    "v2 PROXY protocol header: invalid PP2_TYPE_SSL",
     "v2 PROXY protocol header: invalid PP2_TYPE_UNIQUE_ID",
     "v2 PROXY protocol header: invalid PP2_TYPE_AWS",
     "v2 PROXY protocol header: invalid PP2_TYPE_AZURE",
@@ -717,7 +718,45 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
             break;
         }
         case PP2_TYPE_SSL:
+        {
+            pp2_tlv_ssl_t *pp2_tlv_ssl = (pp2_tlv_ssl_t*)pp2_tlv->value;
+            uint16_t pp2_tlvs_ssl_len = pp2_tlv_len - sizeof(pp2_tlv_ssl->client) - sizeof(pp2_tlv_ssl->verify);
+            uint16_t pp2_sub_tlv_offset = 0;
+            while (pp2_tlvs_ssl_len)
+            {
+                if (!(pp2_tlv_ssl->client & PP2_CLIENT_SSL || pp2_tlv_ssl->client & PP2_CLIENT_CERT_CONN || pp2_tlv_ssl->client & PP2_CLIENT_CERT_SESS))
+                {
+                    break;
+                }
+                pp2_tlv_t *pp2_sub_tlv_ssl = (pp2_tlv_t * )((uint8_t*) pp2_tlv_ssl->sub_tlv + pp2_sub_tlv_offset);
+                uint16_t pp2_sub_tlv_ssl_len;
+                switch (pp2_sub_tlv_ssl->type)
+                {
+                case PP2_SUBTYPE_SSL_VERSION:
+                case PP2_SUBTYPE_SSL_CN:
+                case PP2_SUBTYPE_SSL_CIPHER:
+                case PP2_SUBTYPE_SSL_SIG_ALG:
+                case PP2_SUBTYPE_SSL_KEY_ALG:
+                {
+                    pp2_sub_tlv_ssl_len = pp2_sub_tlv_ssl->length_hi << 8 | pp2_sub_tlv_ssl->length_lo;
+                    /* +1 to save it as a string */
+                    tlv_t *tlv = tlv_new(pp2_sub_tlv_ssl->type, pp2_sub_tlv_ssl_len + 1, pp2_sub_tlv_ssl->value);
+                    if (!tlv || !tlv_array_append_tlv(&pp_info->tlv_array, tlv))
+                    {
+                        return ERR_HEAP_ALLOC;
+                    }
+                    tlv->value[pp2_sub_tlv_ssl_len] = '\0';
+                    break;
+                }
+                default:
+                    return ERR_PP2_TYPE_SSL;
+                }
+
+                pp2_tlvs_ssl_len = pp2_tlvs_ssl_len - 3 - pp2_sub_tlv_ssl_len;
+                pp2_sub_tlv_offset += 3 + pp2_sub_tlv_ssl_len;
+            }
             break;
+        }
         case PP2_TYPE_AWS:
         {
             if (pp2_tlv_len < sizeof(pp2_tlv_aws_t))
