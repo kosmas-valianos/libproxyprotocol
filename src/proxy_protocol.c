@@ -154,7 +154,7 @@ static const char *errors[] = {
 
 const char *pp_strerror(int32_t error)
 {
-    if (error < ERR_PP1_DST_PORT || error > ERR_NULL)
+    if (error < ERR_HEAP_ALLOC || error > ERR_NULL)
     {
         return NULL;
     }
@@ -211,6 +211,27 @@ static uint8_t tlv_array_append_tlv(tlv_array_t *tlv_array, tlv_t *tlv)
 
     tlv_array->len++;
     tlv_array->tlvs[tlv_array->len - 1] = tlv;
+    return 1;
+}
+
+static uint8_t tlv_array_append_tlv_new(tlv_array_t *tlv_array, uint8_t type, uint16_t length, const void *value)
+{
+    tlv_t *tlv = tlv_new(type, length, value);
+    if (!tlv || !tlv_array_append_tlv(tlv_array, tlv))
+    {
+        return 0;
+    }
+    return 1;
+}
+
+static uint8_t tlv_array_append_tlv_new_usascii(tlv_array_t *tlv_array, uint8_t type, uint16_t length, const void *value)
+{
+    tlv_t *tlv = tlv_new(type, length + 1, value);
+    if (!tlv || !tlv_array_append_tlv(tlv_array, tlv))
+    {
+        return 0;
+    }
+    tlv->value[length] = '\0';
     return 1;
 }
 
@@ -653,28 +674,14 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
 
         switch (pp2_tlv->type)
         {
-        case PP2_TYPE_ALPN:
-        {
-            tlv_t *tlv = tlv_new(pp2_tlv->type, pp2_tlv_len, pp2_tlv->value);
-            if (!tlv || !tlv_array_append_tlv(&pp_info->tlv_array, tlv))
+        case PP2_TYPE_ALPN:      /* Byte sequence */
+        case PP2_TYPE_AUTHORITY: /* UTF8 */
+            if (!tlv_array_append_tlv_new(&pp_info->tlv_array, pp2_tlv->type, pp2_tlv_len, pp2_tlv->value))
             {
                 return ERR_HEAP_ALLOC;
             }
             break;
-        }
-        case PP2_TYPE_AUTHORITY:
-        case PP2_TYPE_NETNS:
-        {
-            /* +1 to save it as a string */
-            tlv_t *tlv = tlv_new(pp2_tlv->type, pp2_tlv_len + 1, pp2_tlv->value);
-            if (!tlv || !tlv_array_append_tlv(&pp_info->tlv_array, tlv))
-            {
-                return ERR_HEAP_ALLOC;
-            }
-            tlv->value[pp2_tlv_len] = '\0';
-            break;
-        }
-        case PP2_TYPE_CRC32C:
+        case PP2_TYPE_CRC32C: /* 32-bit number */
         {
             if (pp2_tlv_len != sizeof(uint32_t))
             {
@@ -695,8 +702,7 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
                 return ERR_PP2_TYPE_CRC32C;
             }
 
-            tlv_t *tlv = tlv_new(pp2_tlv->type, pp2_tlv_len, &crc32c_chksum);
-            if (!tlv || !tlv_array_append_tlv(&pp_info->tlv_array, tlv))
+            if (!tlv_array_append_tlv_new(&pp_info->tlv_array, pp2_tlv->type, pp2_tlv_len, &crc32c_chksum))
             {
                 return ERR_HEAP_ALLOC;
             }
@@ -704,19 +710,16 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
         }
         case PP2_TYPE_NOOP:
             break;
-        case PP2_TYPE_UNIQUE_ID:
-        {
+        case PP2_TYPE_UNIQUE_ID: /* Byte sequence */
             if (pp2_tlv_len > 128)
             {
                 return ERR_PP2_TYPE_UNIQUE_ID;
             }
-            tlv_t *tlv = tlv_new(pp2_tlv->type, pp2_tlv_len, pp2_tlv->value);
-            if (!tlv || !tlv_array_append_tlv(&pp_info->tlv_array, tlv))
+            if (!tlv_array_append_tlv_new(&pp_info->tlv_array, pp2_tlv->type, pp2_tlv_len, pp2_tlv->value))
             {
                 return ERR_HEAP_ALLOC;
             }
             break;
-        }
         case PP2_TYPE_SSL:
         {
             pp2_tlv_ssl_t *pp2_tlv_ssl = (pp2_tlv_ssl_t*)pp2_tlv->value;
@@ -728,26 +731,32 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
                 {
                     break;
                 }
+                if (pp2_sub_tlv_offset > pp2_tlvs_ssl_len)
+                {
+                    return ERR_PP2_TYPE_SSL;
+                }
                 pp2_tlv_t *pp2_sub_tlv_ssl = (pp2_tlv_t * )((uint8_t*) pp2_tlv_ssl->sub_tlv + pp2_sub_tlv_offset);
-                uint16_t pp2_sub_tlv_ssl_len;
+                uint16_t pp2_sub_tlv_ssl_len = pp2_sub_tlv_ssl->length_hi << 8 | pp2_sub_tlv_ssl->length_lo;
                 switch (pp2_sub_tlv_ssl->type)
                 {
-                case PP2_SUBTYPE_SSL_VERSION:
-                case PP2_SUBTYPE_SSL_CN:
-                case PP2_SUBTYPE_SSL_CIPHER:
-                case PP2_SUBTYPE_SSL_SIG_ALG:
-                case PP2_SUBTYPE_SSL_KEY_ALG:
+                case PP2_SUBTYPE_SSL_VERSION: /* US-ASCII */
+                case PP2_SUBTYPE_SSL_CIPHER:  /* US-ASCII */
+                case PP2_SUBTYPE_SSL_SIG_ALG: /* US-ASCII */
+                case PP2_SUBTYPE_SSL_KEY_ALG: /* US-ASCII */
                 {
-                    pp2_sub_tlv_ssl_len = pp2_sub_tlv_ssl->length_hi << 8 | pp2_sub_tlv_ssl->length_lo;
                     /* +1 to save it as a string */
-                    tlv_t *tlv = tlv_new(pp2_sub_tlv_ssl->type, pp2_sub_tlv_ssl_len + 1, pp2_sub_tlv_ssl->value);
-                    if (!tlv || !tlv_array_append_tlv(&pp_info->tlv_array, tlv))
+                    if (!tlv_array_append_tlv_new_usascii(&pp_info->tlv_array, pp2_sub_tlv_ssl->type, pp2_sub_tlv_ssl_len, pp2_sub_tlv_ssl->value))
                     {
                         return ERR_HEAP_ALLOC;
                     }
-                    tlv->value[pp2_sub_tlv_ssl_len] = '\0';
                     break;
                 }
+                case PP2_SUBTYPE_SSL_CN: /* UTF8 */
+                    if (!tlv_array_append_tlv_new(&pp_info->tlv_array, pp2_sub_tlv_ssl->type, pp2_sub_tlv_ssl_len, pp2_sub_tlv_ssl->value))
+                    {
+                        return ERR_HEAP_ALLOC;
+                    }
+                    break;
                 default:
                     return ERR_PP2_TYPE_SSL;
                 }
@@ -757,6 +766,12 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
             }
             break;
         }
+        case PP2_TYPE_NETNS: /* US-ASCII */
+            if (!tlv_array_append_tlv_new_usascii(&pp_info->tlv_array, pp2_tlv->type, pp2_tlv_len, pp2_tlv->value))
+            {
+                return ERR_HEAP_ALLOC;
+            }
+            break;
         case PP2_TYPE_AWS:
         {
             if (pp2_tlv_len < sizeof(pp2_tlv_aws_t))
@@ -765,15 +780,13 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
             }
             pp2_tlv_aws_t *pp2_tlv_aws = (pp2_tlv_aws_t *) pp2_tlv->value;
             /* Connection is done through Private Link/Interface VPC endpoint */
-            if (pp2_tlv_aws->type == PP2_SUBTYPE_AWS_VPCE_ID)
+            if (pp2_tlv_aws->type == PP2_SUBTYPE_AWS_VPCE_ID) /* US-ASCII */
             {
-                /* +1 to save it as a string. Example: \x1vpce-08d2bf15fac5001c9 */
-                tlv_t *tlv = tlv_new(pp2_tlv->type, pp2_tlv_len + 1, pp2_tlv->value);
-                if (!tlv || !tlv_array_append_tlv(&pp_info->tlv_array, tlv))
+                /* Example: \x1vpce-08d2bf15fac5001c9 */
+                if (!tlv_array_append_tlv_new_usascii(&pp_info->tlv_array, pp2_tlv->type, pp2_tlv_len, pp2_tlv->value))
                 {
                     return ERR_HEAP_ALLOC;
                 }
-                tlv->value[pp2_tlv_len] = '\0';
             }
             break;
         }
@@ -785,7 +798,7 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
             }
             pp2_tlv_azure_t *pp2_tlv_azure = (pp2_tlv_azure_t *) pp2_tlv->value;
             /* Connection is done through Private Link service */
-            if (pp2_tlv_azure->type == PP2_TYPE_AZURE)
+            if (pp2_tlv_azure->type == PP2_TYPE_AZURE) /* 32-bit number */
             {
                 tlv_t *tlv = tlv_new(pp2_tlv->type, pp2_tlv_len, pp2_tlv->value);
                 if (!tlv || !tlv_array_append_tlv(&pp_info->tlv_array, tlv))
