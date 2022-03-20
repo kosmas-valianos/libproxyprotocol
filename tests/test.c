@@ -74,6 +74,38 @@ uint8_t pp2_hdr_vpce[] = {
             0x00, 0x00, 0x00, 0x00, /* NOOP TLV end */
 };
 
+uint8_t pp2_hdr_ssl[] = {
+            0x0d, 0x0a, 0x0d, 0x0a, /* Start of v2 signature */
+            0x00, 0x0d, 0x0a, 0x51,
+            0x55, 0x49, 0x54, 0x0a, /* End of v2 signature */
+            0x21, 0x11, 0x00, 0x64, /* ver_cmd, fam and len */
+            0xc0, 0xa8, 0x0a, 0x64, /* Source IP */
+            0xc0, 0xa8, 0x0b, 0x5a, /* Destination IP */
+            0xa5, 0x5c, 0x1f, 0x90, /* Source port, Destination port */
+            0x20, 0x00, 0x4e, 0x07, /* PP2_TYPE_SSL begin */
+            0x00, 0x00, 0x00, 0x00,
+            0x21, 0x00, 0x07, 0x54, /* PP2_SUBTYPE_SSL_VERSION begin */
+            0x4c, 0x53, 0x76, 0x31,
+            0x2e, 0x32, 0x22, 0x00, /* PP2_SUBTYPE_SSL_VERSION end, PP2_SUBTYPE_SSL_CN begin */
+            0x0b, 0x65, 0x78, 0x61,
+            0x6d, 0x70, 0x6c, 0x65,
+            0x2e, 0x63, 0x6f, 0x6d, /* PP2_SUBTYPE_SSL_CN end */
+            0x23, 0x00, 0x1b, 0x45, /* PP2_SUBTYPE_SSL_CIPHER begin */
+            0x43, 0x44, 0x48, 0x45,
+            0x2d, 0x52, 0x53, 0x41,
+            0x2d, 0x41, 0x45, 0x53,
+            0x31, 0x32, 0x38, 0x2d,
+            0x47, 0x43, 0x4d, 0x2d,
+            0x53, 0x48, 0x41, 0x32,
+            0x35, 0x36, 0x24, 0x00, /* PP2_SUBTYPE_SSL_CIPHER end, PP2_SUBTYPE_SSL_SIG_ALG begin */
+            0x06, 0x53, 0x48, 0x41,
+            0x32, 0x35, 0x36, 0x25, /* PP2_SUBTYPE_SSL_SIG_ALG end, PP2_SUBTYPE_SSL_KEY_ALG begin */
+            0x00, 0x07, 0x52, 0x53,
+            0x41, 0x32, 0x30, 0x34,
+            0x38, 0x04, 0x00, 0x04, /* PP2_SUBTYPE_SSL_KEY_ALG end, PP2_SUBTYPE_SSL_VERSION end, PP2_TYPE_NOOP begin */
+            0x00, 0x00, 0x00, 0x00  /* PP2_TYPE_NOOP end */
+};
+
 static uint8_t pp_verify_tlvs(const pp_info_t *pp_info, const test_tlv_t (*expected_tlvs)[10])
 {
     uint8_t i;
@@ -135,7 +167,7 @@ int main()
             .rc_expected = strlen((char *) tests[1].raw_bytes_in),
         },
         {
-            .name = "v2 PROXY protocol header: PROXY, TCP over IPv4, PP2_TYPE_CRC32C, PP2_TYPE_AWS(PP2_SUBTYPE_AWS_VPCE_ID)",
+            .name = "v2 PROXY protocol header: PROXY, TCP over IPv4. TLVs: PP2_TYPE_CRC32C, PP2_TYPE_AWS(PP2_SUBTYPE_AWS_VPCE_ID)",
             .raw_bytes_in = pp2_hdr_vpce,
             .raw_bytes_in_length = sizeof(pp2_hdr_vpce),
             .rc_expected = sizeof(pp2_hdr_vpce),
@@ -224,6 +256,47 @@ int main()
             },
             .pp_info_out_expected = tests[8].pp_info_in,
         },
+        {
+            .name = "v2 PROXY protocol header: PROXY, TCP over IPv4. TLVs: "
+                    "PP2_TYPE_SSL, PP2_SUBTYPE_SSL_VERSION, PP2_SUBTYPE_SSL_CN, PP2_SUBTYPE_SSL_CIPHER, PP2_SUBTYPE_SSL_SIG_ALG, PP2_SUBTYPE_SSL_KEY_ALG ",
+            .raw_bytes_in = pp2_hdr_ssl,
+            .raw_bytes_in_length = sizeof(pp2_hdr_ssl),
+            .rc_expected = sizeof(pp2_hdr_ssl),
+            .pp_info_out_expected = {
+                .src_addr = "192.168.10.100",
+                .dst_addr = "192.168.11.90",
+                .src_port = 42332,
+                .dst_port = 8080
+            },
+            .expected_tlvs = {
+                {
+                    .type = PP2_SUBTYPE_SSL_VERSION,
+                    .value_len = 8,
+                    .value = (uint8_t*)"TLSv1.2"
+                },
+                {
+                    .type = PP2_SUBTYPE_SSL_CN,
+                    .value_len = 11,
+                    /* example.com */
+                    .value = (uint8_t*)"\x65\x78\x61\x6d\x70\x6c\x65\x2e\x63\x6f\x6d"
+                },
+                {
+                    .type = PP2_SUBTYPE_SSL_CIPHER,
+                    .value_len = 28,
+                    .value = (uint8_t*)"ECDHE-RSA-AES128-GCM-SHA256"
+                },
+                {
+                    .type = PP2_SUBTYPE_SSL_SIG_ALG,
+                    .value_len = 7,
+                    .value = (uint8_t*)"SHA256"
+                },
+                {
+                    .type = PP2_SUBTYPE_SSL_KEY_ALG,
+                    .value_len = 8,
+                    .value = (uint8_t*)"RSA2048"
+                },
+            },
+        },
     };
 
     /* Run tests */
@@ -267,7 +340,7 @@ int main()
     printf("Running test: pp_strerror()...");
     if (strcmp("No error", pp_strerror(ERR_NULL))
      || strcmp("v1 PROXY protocol header: invalid dst port", pp_strerror(ERR_PP1_DST_PORT))
-     || pp_strerror(-26) || pp_strerror(1))
+     || pp_strerror(-28) || pp_strerror(1))
     {
         printf("FAILED\n");
         return EXIT_FAILURE;
