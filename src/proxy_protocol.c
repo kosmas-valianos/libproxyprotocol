@@ -723,18 +723,15 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
         case PP2_TYPE_SSL:
         {
             pp2_tlv_ssl_t *pp2_tlv_ssl = (pp2_tlv_ssl_t*)pp2_tlv->value;
+            /* TODO save client, verify in pp_info_t */
+            /*if (!(pp2_tlv_ssl->client & PP2_CLIENT_SSL || pp2_tlv_ssl->client & PP2_CLIENT_CERT_CONN || pp2_tlv_ssl->client & PP2_CLIENT_CERT_SESS))
+            {
+                break;
+            }*/
             uint16_t pp2_tlvs_ssl_len = pp2_tlv_len - sizeof(pp2_tlv_ssl->client) - sizeof(pp2_tlv_ssl->verify);
             uint16_t pp2_sub_tlv_offset = 0;
-            while (pp2_tlvs_ssl_len)
+            while (pp2_sub_tlv_offset < pp2_tlvs_ssl_len)
             {
-                if (!(pp2_tlv_ssl->client & PP2_CLIENT_SSL || pp2_tlv_ssl->client & PP2_CLIENT_CERT_CONN || pp2_tlv_ssl->client & PP2_CLIENT_CERT_SESS))
-                {
-                    break;
-                }
-                if (pp2_sub_tlv_offset > pp2_tlvs_ssl_len)
-                {
-                    return ERR_PP2_TYPE_SSL;
-                }
                 pp2_tlv_t *pp2_sub_tlv_ssl = (pp2_tlv_t * )((uint8_t*) pp2_tlv_ssl->sub_tlv + pp2_sub_tlv_offset);
                 uint16_t pp2_sub_tlv_ssl_len = pp2_sub_tlv_ssl->length_hi << 8 | pp2_sub_tlv_ssl->length_lo;
                 switch (pp2_sub_tlv_ssl->type)
@@ -743,14 +740,12 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
                 case PP2_SUBTYPE_SSL_CIPHER:  /* US-ASCII */
                 case PP2_SUBTYPE_SSL_SIG_ALG: /* US-ASCII */
                 case PP2_SUBTYPE_SSL_KEY_ALG: /* US-ASCII */
-                {
                     /* +1 to save it as a string */
                     if (!tlv_array_append_tlv_new_usascii(&pp_info->tlv_array, pp2_sub_tlv_ssl->type, pp2_sub_tlv_ssl_len, pp2_sub_tlv_ssl->value))
                     {
                         return ERR_HEAP_ALLOC;
                     }
                     break;
-                }
                 case PP2_SUBTYPE_SSL_CN: /* UTF8 */
                     if (!tlv_array_append_tlv_new(&pp_info->tlv_array, pp2_sub_tlv_ssl->type, pp2_sub_tlv_ssl_len, pp2_sub_tlv_ssl->value))
                     {
@@ -761,8 +756,11 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
                     return ERR_PP2_TYPE_SSL;
                 }
 
-                pp2_tlvs_ssl_len = pp2_tlvs_ssl_len - 3 - pp2_sub_tlv_ssl_len;
                 pp2_sub_tlv_offset += 3 + pp2_sub_tlv_ssl_len;
+            }
+            if (pp2_sub_tlv_offset > pp2_tlvs_ssl_len)
+            {
+                return ERR_PP2_TYPE_SSL;
             }
             break;
         }
