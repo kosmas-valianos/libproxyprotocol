@@ -682,7 +682,7 @@ static int32_t pp2_parse_hdr(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
     /* Any TLV vector must be at least 3 bytes */
     if (tlv_vectors_len > 3)
     {
-        pp_info->tlv_array = malloc(sizeof(*pp_info->tlv_array));
+        pp_info->tlv_array = calloc(1, sizeof(*pp_info->tlv_array));
     }
     while (tlv_vectors_len > 3)
     {
