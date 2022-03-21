@@ -263,7 +263,7 @@ static void tlv_array_clear(tlv_array_t *tlv_array)
     tlv_array->tlvs = NULL;
 }
 
-uint8_t *pp_info_get_tlv_value(const pp_info_t *pp_info, uint8_t type, uint8_t subtype, uint16_t *value_len_out)
+const uint8_t *pp_info_get_tlv_value(const pp_info_t *pp_info, uint8_t type, uint8_t subtype, uint16_t *value_len_out)
 {
     *value_len_out = 0;
     if (!pp_info->tlv_array->tlvs || !pp_info->tlv_array->len)

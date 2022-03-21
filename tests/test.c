@@ -115,7 +115,7 @@ static uint8_t pp_verify_tlvs(const pp_info_t *pp_info, const test_tlv_t (*expec
         if (test_tlv->type != 0)
         {
             uint16_t tlv_value_len;
-            uint8_t *tlv_value = pp_info_get_tlv_value(pp_info, test_tlv->type, test_tlv->subtype, &tlv_value_len);
+            const uint8_t *tlv_value = pp_info_get_tlv_value(pp_info, test_tlv->type, test_tlv->subtype, &tlv_value_len);
             if (!tlv_value || tlv_value_len != test_tlv->value_len || memcmp(tlv_value, test_tlv->value, tlv_value_len))
             {
                 return 0;

@@ -107,9 +107,9 @@ typedef struct
     tlv_array_t *tlv_array;
 } pp_info_t;
 
-const char *pp_strerror(int32_t error);
-uint8_t    *pp_info_get_tlv_value(const pp_info_t *pp_info, uint8_t type, uint8_t subtype, uint16_t *value_len_out);
-void        pp_info_clear(pp_info_t *pp_info);
+const char    *pp_strerror(int32_t error);
+const uint8_t *pp_info_get_tlv_value(const pp_info_t *pp_info, uint8_t type, uint8_t subtype, uint16_t *value_len_out);
+void           pp_info_clear(pp_info_t *pp_info);
 
 /*
  * version:
