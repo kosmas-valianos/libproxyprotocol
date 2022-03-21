@@ -6,11 +6,11 @@ An ANSI C library to parse and create [PROXY protocol](https://www.haproxy.org/d
 * Compilable with most compilers and usable at any platform as it is written in ANSI C.
 
 ## Installation
-The library should be compilable to any platform as it is written in ANSI C. It comes with a Makefile which can create the shared library `libproxyprotocol.so` which can then be linked to your application. Special care has been taken to make it work with Windows as well. In that case you have to compile it to a DLL yourself. In case of windows remember that you have to link with the `ws2_32.lib`. An example of this is shown in tests.
+The library should be compilable to any platform as it is written in ANSI C. It comes with a Makefile which can create the shared library `libproxyprotocol.so` which can then be linked to your application. Special care has been taken to make it work with Windows as well. In that case you have to compile it to a .dll/.lib yourself. In case of Windows remember that you have to link with the `ws2_32.lib`. An example of this is shown in tests.
 
 ## API
 ### Parsing
-To parse a PROXY protocol header you need to use `pp_parse()` with the following parameters:
+**`pp_parse()`**: parsing a PROXY protocol header. Parameters:
 * `uint8_t *pkt`: Pointer to a buffer with the data to parse. Normally it will be the buffer used to peek data from a socket.
 * `uint32_t pktlen`: Data's length. Normally it will be the return value of a `recv(MSG_PEEK)`.
 * `pp_info_t *proxy_info`: Pointer to a `pp_info_t` variable which will be used to save all the extracted information of the PROXY protocol header including the TLVs
@@ -18,20 +18,20 @@ To parse a PROXY protocol header you need to use `pp_parse()` with the following
 
 You shall not pass your `pp_info_t` variable to `pp_parse()` again without first clearing it with `pp_info_clear()` (see below)
 
-To extract TLVs' values it is strongly suggested that you use `pp_info_get_tlv_value()` with the following parameters:
+**`pp_info_get_tlv_value()`**: extracting TLVs' values. Parameters:
 * `pp_info_t *pp_info`: The `pp_info_t` used in the `pp_parse()`
 * `uint8_t type`: The type of the TLV you are looking for as per the specification e.g. PP2_TYPE_AWS, PP2_TYPE_AZURE etc.
 * `uint8_t subtype`: The subtype of the TLV you are looking for (in case it is needed else 0 to get it ignored) as per the specification e.g. PP2_SUBTYPE_AWS_VPCE_ID, PP2_SUBTYPE_AZURE_PRIVATEENDPOINT_LINKID
 * `uint16_t *value_len_out`: The length of the value so that applications can copy and use the value properly
-* `return value: uint8_t *`: Pointer to the value. In case the value is a string e.g. PP2_TYPE_AWS-PP2_SUBTYPE_AWS_VPCE_ID thenthe buffer is NULL terminated so that it can be used directly for string operations like `strcmp()` etc. **Do not manipulate these data in any way, rather make copies of them if you need to modify them.**
+* `return value: uint8_t *`: Pointer to the value. In case the value is a string e.g. PP2_TYPE_AWS-PP2_SUBTYPE_AWS_VPCE_ID then the buffer is NULL terminated so that it can be used directly for string operations like `strcmp()` etc. **Do not manipulate these data in any way, rather make copies of them if you need to modify them.**
 
-To clear a `pp_info_t` structure you **MUST** use  `pp_info_clear()` with the following parameter:
+**`pp_info_clear()`**: clearing a `pp_info_t` structure. You **MUST** use it. Parameter:
 * `pp_info_t *pp_info`: A pointer to the `pp_info_t` used in `pp_parse()`
 
 It basically clears the saved TLVs structure. For v1 it is not really needed as there are not any TLVs but to be safe always use it! A PROXY protocol sender might change from v1 to v2 so better to have your application prepared.
 
 ### Creating
-To create a PROXY protocol header you need to use `pp_create_hdr()` with the following parameters:
+**`pp_create_hdr()`**: create a PROXY protocol header. Parameters:
 * `uint8_t version`: `1` or `2` depending on the PROXY protocol version you want to use.
 * `uint8_t fam`: Transport and address family. The values match exactly the specification:
   * v2 
@@ -54,5 +54,4 @@ To create a PROXY protocol header you need to use `pp_create_hdr()` with the fol
 See `examples/client_server.c`
 
 ## In progress
-* Parsing `PP2_TYPE_SSL` TLV of the v2 PROXY protocol header is not yet supported. TLVs of this type will not be saved in the `pp_info_t` structure. Will be added in the next release. Draft PR https://github.com/kosmas-valianos/libproxyprotocol/pull/5
 * Creating v2 PROXY protocol headers with TLVs is not yet supported. Will be added in the next release
