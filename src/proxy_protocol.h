@@ -81,28 +81,30 @@ enum
 /* PP2_TYPE_AZURE subtypes */
 #define PP2_SUBTYPE_AZURE_PRIVATEENDPOINT_LINKID 0x01
 
-typedef struct
-{
-    uint8_t  type;
-    uint16_t length;
-    uint8_t  value[1];
-} tlv_t;
+typedef struct _tlv_array_t tlv_array_t;
 
 typedef struct
 {
-    uint32_t  len;  /* Number of elements  */
-    uint32_t  size; /* Allocated elements  */
-    tlv_t   **tlvs; /* Pointer to tlv_t* elements */
-} tlv_array_t;
+    uint8_t ssl;                /* 1: client connected over SSL/TLS 0: otherwise */
+    uint8_t cert_in_connection; /* 1: client provided a certificate over the current connection 0: otherwise */
+    uint8_t cert_in_session;    /* 1: client provided a certificate at least once over the TLS session this connection belongs to 0: otherwise */
+    uint8_t cert_verified;      /* 1: client presented a certificate and it was successfully verified 1: otherwise */
+} pp2_ssl_info_t;
 
 typedef struct
 {
-    uint8_t     v2local; /* Used only in v2. 1: LOCAL 0: PROXY */
-    char        src_addr[108];
-    char        dst_addr[108];
-    uint16_t    src_port;
-    uint16_t    dst_port;
-    tlv_array_t tlv_array;
+    uint8_t        local; /* 1: LOCAL 0: PROXY */
+    pp2_ssl_info_t pp2_ssl_info;
+} pp2_info_t;
+
+typedef struct
+{
+    char         src_addr[108];
+    char         dst_addr[108];
+    uint16_t     src_port;
+    uint16_t     dst_port;
+    pp2_info_t   pp2_info;
+    tlv_array_t *tlv_array;
 } pp_info_t;
 
 const char *pp_strerror(int32_t error);
