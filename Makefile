@@ -16,7 +16,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 
-CFLAGS := -Wall -Wextra -Wshadow -ansi -fshort-enums -fpic
+CFLAGS := -Wall -Wextra -Wshadow -Wimplicit-fallthrough=0 -ansi -fshort-enums -fpic
 
 all: build
 

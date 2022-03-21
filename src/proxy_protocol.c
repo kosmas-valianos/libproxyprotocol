@@ -121,6 +121,20 @@ typedef struct
 
 #pragma pack()
 
+typedef struct
+{
+    uint8_t  type;
+    uint16_t length;
+    uint8_t  value[1];
+} tlv_t;
+
+struct _tlv_array_t
+{
+    uint32_t  len;  /* Number of elements  */
+    uint32_t  size; /* Allocated elements  */
+    tlv_t   **tlvs; /* Pointer to tlv_t* elements */
+};
+
 static const char *errors[] = {
     "No error",
     "Invalid PROXY protocol version given. Only 1 and 2 are valid",
@@ -246,21 +260,21 @@ static void tlv_array_clear(tlv_array_t *tlv_array)
     tlv_array->len = 0;
     tlv_array->size = 0;
     free(tlv_array->tlvs);
-
+    tlv_array->tlvs = NULL;
 }
 
 uint8_t *pp_info_get_tlv_value(const pp_info_t *pp_info, uint8_t type, uint8_t subtype, uint16_t *value_len_out)
 {
     *value_len_out = 0;
-    if (!pp_info->tlv_array.tlvs || !pp_info->tlv_array.len)
+    if (!pp_info->tlv_array->tlvs || !pp_info->tlv_array->len)
     {
         return NULL;
     }
 
     uint32_t i;
-    for (i = 0; i < pp_info->tlv_array.len; i++)
+    for (i = 0; i < pp_info->tlv_array->len; i++)
     {
-        tlv_t *tlv = pp_info->tlv_array.tlvs[i];
+        tlv_t *tlv = pp_info->tlv_array->tlvs[i];
         if (tlv->type == type)
         {
             if (subtype > 0)
@@ -281,7 +295,11 @@ uint8_t *pp_info_get_tlv_value(const pp_info_t *pp_info, uint8_t type, uint8_t s
 
 void pp_info_clear(pp_info_t *pp_info)
 {
-    tlv_array_clear(&pp_info->tlv_array);
+    if (pp_info->tlv_array)
+    {
+        tlv_array_clear(pp_info->tlv_array);
+        free(pp_info->tlv_array);
+    }
     memset(pp_info, 0, sizeof(*pp_info));
 }
 
@@ -289,7 +307,7 @@ uint8_t *pp2_create_hdr(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp2_hdr
 {
     proxy_hdr_v2_t proxy_hdr_v2 = {
         .sig = "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A",
-        .ver_cmd = pp_info->v2local ? '\x20' : '\x21',
+        .ver_cmd = pp_info->pp2_info.local ? '\x20' : '\x21',
     };
 
     uint8_t transport_protocol = fam & 0x0f;
@@ -305,7 +323,7 @@ uint8_t *pp2_create_hdr(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp2_hdr
     if (address_family == 0x0)
     {
         len = 0;
-        if (!pp_info->v2local)
+        if (!pp_info->pp2_info.local)
         {
             *error = ERR_PP2_TRANSPORT_FAMILY;
             return NULL;
@@ -526,7 +544,7 @@ static uint32_t crc32c(const uint8_t *buf, uint32_t len)
 }
 
 /* Verifies and parses a version 2 PROXY protocol header */
-static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
+static int32_t pp2_parse_hdr(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
 {
     const uint8_t *ppv2_hdr = pkt;
     const proxy_hdr_v2_t *proxy_hdr_v2 = (proxy_hdr_v2_t *) pkt;
@@ -551,11 +569,11 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
     uint8_t cmd = proxy_hdr_v2->ver_cmd & 0x0f;
     if (cmd == 0x0)
     {
-        pp_info->v2local = 1;
+        pp_info->pp2_info.local = 1;
     }
     else if (cmd == 0x1)
     {
-        pp_info->v2local = 0;
+        pp_info->pp2_info.local = 0;
     }
     else
     {
@@ -662,6 +680,10 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
 
     /* TLVs */
     /* Any TLV vector must be at least 3 bytes */
+    if (tlv_vectors_len > 3)
+    {
+        pp_info->tlv_array = malloc(sizeof(*pp_info->tlv_array));
+    }
     while (tlv_vectors_len > 3)
     {
         pp2_tlv_t *pp2_tlv = (pp2_tlv_t *) pkt;
@@ -676,7 +698,7 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
         {
         case PP2_TYPE_ALPN:      /* Byte sequence */
         case PP2_TYPE_AUTHORITY: /* UTF8 */
-            if (!tlv_array_append_tlv_new(&pp_info->tlv_array, pp2_tlv->type, pp2_tlv_len, pp2_tlv->value))
+            if (!tlv_array_append_tlv_new(pp_info->tlv_array, pp2_tlv->type, pp2_tlv_len, pp2_tlv->value))
             {
                 return ERR_HEAP_ALLOC;
             }
@@ -702,7 +724,7 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
                 return ERR_PP2_TYPE_CRC32C;
             }
 
-            if (!tlv_array_append_tlv_new(&pp_info->tlv_array, pp2_tlv->type, pp2_tlv_len, &crc32c_chksum))
+            if (!tlv_array_append_tlv_new(pp_info->tlv_array, pp2_tlv->type, pp2_tlv_len, &crc32c_chksum))
             {
                 return ERR_HEAP_ALLOC;
             }
@@ -715,7 +737,7 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
             {
                 return ERR_PP2_TYPE_UNIQUE_ID;
             }
-            if (!tlv_array_append_tlv_new(&pp_info->tlv_array, pp2_tlv->type, pp2_tlv_len, pp2_tlv->value))
+            if (!tlv_array_append_tlv_new(pp_info->tlv_array, pp2_tlv->type, pp2_tlv_len, pp2_tlv->value))
             {
                 return ERR_HEAP_ALLOC;
             }
@@ -723,12 +745,15 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
         case PP2_TYPE_SSL:
         {
             pp2_tlv_ssl_t *pp2_tlv_ssl = (pp2_tlv_ssl_t*)pp2_tlv->value;
-            /* TODO save client, verify in pp_info_t */
-            /*if (!(pp2_tlv_ssl->client & PP2_CLIENT_SSL || pp2_tlv_ssl->client & PP2_CLIENT_CERT_CONN || pp2_tlv_ssl->client & PP2_CLIENT_CERT_SESS))
-            {
-                break;
-            }*/
+
+            /* Set the pp2_ssl_info */
+            pp_info->pp2_info.pp2_ssl_info.ssl = !!(pp2_tlv_ssl->client & PP2_CLIENT_SSL);
+            pp_info->pp2_info.pp2_ssl_info.cert_in_connection = !!(pp2_tlv_ssl->client & PP2_CLIENT_CERT_CONN);
+            pp_info->pp2_info.pp2_ssl_info.cert_in_session = !!(pp2_tlv_ssl->client & PP2_CLIENT_CERT_SESS);
+            pp_info->pp2_info.pp2_ssl_info.cert_verified = !pp2_tlv_ssl->verify;
+
             uint16_t pp2_tlvs_ssl_len = pp2_tlv_len - sizeof(pp2_tlv_ssl->client) - sizeof(pp2_tlv_ssl->verify);
+            uint8_t tlv_ssl_version_found = 0;
             uint16_t pp2_sub_tlv_offset = 0;
             while (pp2_sub_tlv_offset < pp2_tlvs_ssl_len)
             {
@@ -737,17 +762,17 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
                 switch (pp2_sub_tlv_ssl->type)
                 {
                 case PP2_SUBTYPE_SSL_VERSION: /* US-ASCII */
+                    tlv_ssl_version_found = 1;
                 case PP2_SUBTYPE_SSL_CIPHER:  /* US-ASCII */
                 case PP2_SUBTYPE_SSL_SIG_ALG: /* US-ASCII */
                 case PP2_SUBTYPE_SSL_KEY_ALG: /* US-ASCII */
-                    /* +1 to save it as a string */
-                    if (!tlv_array_append_tlv_new_usascii(&pp_info->tlv_array, pp2_sub_tlv_ssl->type, pp2_sub_tlv_ssl_len, pp2_sub_tlv_ssl->value))
+                    if (!tlv_array_append_tlv_new_usascii(pp_info->tlv_array, pp2_sub_tlv_ssl->type, pp2_sub_tlv_ssl_len, pp2_sub_tlv_ssl->value))
                     {
                         return ERR_HEAP_ALLOC;
                     }
                     break;
                 case PP2_SUBTYPE_SSL_CN: /* UTF8 */
-                    if (!tlv_array_append_tlv_new(&pp_info->tlv_array, pp2_sub_tlv_ssl->type, pp2_sub_tlv_ssl_len, pp2_sub_tlv_ssl->value))
+                    if (!tlv_array_append_tlv_new(pp_info->tlv_array, pp2_sub_tlv_ssl->type, pp2_sub_tlv_ssl_len, pp2_sub_tlv_ssl->value))
                     {
                         return ERR_HEAP_ALLOC;
                     }
@@ -758,14 +783,14 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
 
                 pp2_sub_tlv_offset += 3 + pp2_sub_tlv_ssl_len;
             }
-            if (pp2_sub_tlv_offset > pp2_tlvs_ssl_len)
+            if (pp2_sub_tlv_offset > pp2_tlvs_ssl_len || (pp_info->pp2_info.pp2_ssl_info.ssl && !tlv_ssl_version_found))
             {
                 return ERR_PP2_TYPE_SSL;
             }
             break;
         }
         case PP2_TYPE_NETNS: /* US-ASCII */
-            if (!tlv_array_append_tlv_new_usascii(&pp_info->tlv_array, pp2_tlv->type, pp2_tlv_len, pp2_tlv->value))
+            if (!tlv_array_append_tlv_new_usascii(pp_info->tlv_array, pp2_tlv->type, pp2_tlv_len, pp2_tlv->value))
             {
                 return ERR_HEAP_ALLOC;
             }
@@ -781,7 +806,7 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
             if (pp2_tlv_aws->type == PP2_SUBTYPE_AWS_VPCE_ID) /* US-ASCII */
             {
                 /* Example: \x1vpce-08d2bf15fac5001c9 */
-                if (!tlv_array_append_tlv_new_usascii(&pp_info->tlv_array, pp2_tlv->type, pp2_tlv_len, pp2_tlv->value))
+                if (!tlv_array_append_tlv_new_usascii(pp_info->tlv_array, pp2_tlv->type, pp2_tlv_len, pp2_tlv->value))
                 {
                     return ERR_HEAP_ALLOC;
                 }
@@ -799,7 +824,7 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
             if (pp2_tlv_azure->type == PP2_TYPE_AZURE) /* 32-bit number */
             {
                 tlv_t *tlv = tlv_new(pp2_tlv->type, pp2_tlv_len, pp2_tlv->value);
-                if (!tlv || !tlv_array_append_tlv(&pp_info->tlv_array, tlv))
+                if (!tlv || !tlv_array_append_tlv(pp_info->tlv_array, tlv))
                 {
                     return ERR_HEAP_ALLOC;
                 }
@@ -816,7 +841,7 @@ static int32_t ppv2_parse(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
     return sizeof(proxy_hdr_v2_t) + len;
 }
 
-static int32_t ppv1_parse(const uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
+static int32_t pp1_parse_hdr(const uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
 {
     char block[PP1_MAX_LENGHT] = { 0 };
     char *ptr = block;
@@ -979,11 +1004,11 @@ int32_t pp_parse_hdr(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
     memset(pp_info, 0, sizeof(*pp_info));
     if (pktlen >= 16 && !memcmp(pkt, "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A", 12))
     {
-        return ppv2_parse(pkt, pktlen, pp_info);
+        return pp2_parse_hdr(pkt, pktlen, pp_info);
     }
     else if (pktlen >= 8 && !memcmp(pkt, "\x50\x52\x4F\x58\x59", 5))
     {
-        return ppv1_parse(pkt, pktlen, pp_info);;
+        return pp1_parse_hdr(pkt, pktlen, pp_info);;
     }
     else
     {

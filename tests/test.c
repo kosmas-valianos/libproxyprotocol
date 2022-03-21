@@ -127,7 +127,7 @@ static uint8_t pp_verify_tlvs(const pp_info_t *pp_info, const test_tlv_t (*expec
 
 static uint8_t pp_info_equal(const pp_info_t *pp_info_a, const pp_info_t *pp_info_b)
 {
-    if (pp_info_a->v2local != pp_info_b->v2local)
+    if (pp_info_a->pp2_info.local != pp_info_b->pp2_info.local)
     {
         return 0;
     }
@@ -144,6 +144,10 @@ static uint8_t pp_info_equal(const pp_info_t *pp_info_a, const pp_info_t *pp_inf
         return 0;
     }
     if (pp_info_a->dst_port != pp_info_b->dst_port)
+    {
+        return 0;
+    }
+    if (memcmp(&pp_info_a->pp2_info, &pp_info_b->pp2_info, sizeof(pp2_info_t)))
     {
         return 0;
     }
@@ -229,8 +233,8 @@ int main()
             .name = "v2 PROXY protocol header: LOCAL, AF_UNSPEC create and parse",
             .version = 2,
             .fam = '\x00',
-            .pp_info_in = { .v2local = 1 },
-            .pp_info_out_expected = { .v2local = 1 },
+            .pp_info_in = { .pp2_info.local = 1 },
+            .pp_info_out_expected = { .pp2_info.local = 1 },
         },
         {
             .name = "v2 PROXY protocol header: PROXY, TCP over IPv6 create and parse",
@@ -266,7 +270,14 @@ int main()
                 .src_addr = "192.168.10.100",
                 .dst_addr = "192.168.11.90",
                 .src_port = 42332,
-                .dst_port = 8080
+                .dst_port = 8080,
+                .pp2_info = { .local = 0, .pp2_ssl_info = {
+                        .ssl = 1,
+                        .cert_in_connection = 1,
+                        .cert_in_session = 1,
+                        .cert_verified = 1
+                    }
+                }
             },
             .expected_tlvs = {
                 {
