@@ -169,7 +169,8 @@ static const char *errors[] = {
     "v2 PROXY protocol header: wrong signature",
     "v2 PROXY protocol header: wrong version",
     "v2 PROXY protocol header: wrong command",
-    "v2 PROXY protocol header: wrong transport protocol or address family",
+    "v2 PROXY protocol header: wrong address family",
+    "v2 PROXY protocol header: wrong transport protocol",
     "v2 PROXY protocol header: length",
     "v2 PROXY protocol header: invalid IPv4 src IP",
     "v2 PROXY protocol header: invalid IPv4 dst IP",
@@ -291,9 +292,9 @@ static void tlv_array_clear(tlv_array_t *tlv_array)
     tlv_array->tlvs = NULL;
 }
 
-static const uint8_t *pp_info_get_tlv_value(const pp_info_t *pp_info, uint8_t type, uint8_t subtype, uint16_t *value_len_out)
+static const uint8_t *pp_info_get_tlv_value(const pp_info_t *pp_info, uint8_t type, uint8_t subtype, uint16_t *length)
 {
-    *value_len_out = 0;
+    *length = 0;
     if (!pp_info->tlv_array->tlvs || !pp_info->tlv_array->len)
     {
         return NULL;
@@ -309,76 +310,76 @@ static const uint8_t *pp_info_get_tlv_value(const pp_info_t *pp_info, uint8_t ty
             {
                 if (tlv->value[0] == subtype)
                 {
-                    *value_len_out = tlv->length - 1;
+                    *length = tlv->length - 1;
                     return &tlv->value[1];
                 }
                 return NULL;
             }
-            *value_len_out = tlv->length;
+            *length = tlv->length;
             return tlv->value;
         }
     }
     return NULL;
 }
 
-const uint8_t *pp_info_get_alpn(const pp_info_t *pp_info, uint16_t *value_len_out)
+const uint8_t *pp_info_get_alpn(const pp_info_t *pp_info, uint16_t *length)
 {
-    return pp_info_get_tlv_value(pp_info, PP2_TYPE_ALPN, 0, value_len_out);
+    return pp_info_get_tlv_value(pp_info, PP2_TYPE_ALPN, 0, length);
 }
 
-const uint8_t *pp_info_get_authority(const pp_info_t *pp_info, uint16_t *value_len_out)
+const uint8_t *pp_info_get_authority(const pp_info_t *pp_info, uint16_t *length)
 {
-    return pp_info_get_tlv_value(pp_info, PP2_TYPE_AUTHORITY, 0, value_len_out);
+    return pp_info_get_tlv_value(pp_info, PP2_TYPE_AUTHORITY, 0, length);
 }
 
-const uint8_t *pp_info_get_crc32c(const pp_info_t *pp_info, uint16_t *value_len_out)
+const uint8_t *pp_info_get_crc32c(const pp_info_t *pp_info, uint16_t *length)
 {
-    return pp_info_get_tlv_value(pp_info, PP2_TYPE_CRC32C, 0, value_len_out);
+    return pp_info_get_tlv_value(pp_info, PP2_TYPE_CRC32C, 0, length);
 }
 
-const uint8_t *pp_info_get_unique_id(const pp_info_t *pp_info, uint16_t *value_len_out)
+const uint8_t *pp_info_get_unique_id(const pp_info_t *pp_info, uint16_t *length)
 {
-    return pp_info_get_tlv_value(pp_info, PP2_TYPE_UNIQUE_ID, 0, value_len_out);
+    return pp_info_get_tlv_value(pp_info, PP2_TYPE_UNIQUE_ID, 0, length);
 }
 
-const uint8_t *pp_info_get_ssl_version(const pp_info_t *pp_info, uint16_t *value_len_out)
+const uint8_t *pp_info_get_ssl_version(const pp_info_t *pp_info, uint16_t *length)
 {
-    return pp_info_get_tlv_value(pp_info, PP2_SUBTYPE_SSL_VERSION, 0, value_len_out);
+    return pp_info_get_tlv_value(pp_info, PP2_SUBTYPE_SSL_VERSION, 0, length);
 }
 
-const uint8_t *pp_info_get_ssl_cn(const pp_info_t *pp_info, uint16_t *value_len_out)
+const uint8_t *pp_info_get_ssl_cn(const pp_info_t *pp_info, uint16_t *length)
 {
-    return pp_info_get_tlv_value(pp_info, PP2_SUBTYPE_SSL_CN, 0, value_len_out);
+    return pp_info_get_tlv_value(pp_info, PP2_SUBTYPE_SSL_CN, 0, length);
 }
 
-const uint8_t *pp_info_get_ssl_cipher(const pp_info_t *pp_info, uint16_t *value_len_out)
+const uint8_t *pp_info_get_ssl_cipher(const pp_info_t *pp_info, uint16_t *length)
 {
-    return pp_info_get_tlv_value(pp_info, PP2_SUBTYPE_SSL_CIPHER, 0, value_len_out);
+    return pp_info_get_tlv_value(pp_info, PP2_SUBTYPE_SSL_CIPHER, 0, length);
 }
 
-const uint8_t *pp_info_get_ssl_sig_alg(const pp_info_t *pp_info, uint16_t *value_len_out)
+const uint8_t *pp_info_get_ssl_sig_alg(const pp_info_t *pp_info, uint16_t *length)
 {
-    return pp_info_get_tlv_value(pp_info, PP2_SUBTYPE_SSL_SIG_ALG, 0, value_len_out);
+    return pp_info_get_tlv_value(pp_info, PP2_SUBTYPE_SSL_SIG_ALG, 0, length);
 }
 
-const uint8_t *pp_info_get_ssl_key_alg(const pp_info_t *pp_info, uint16_t *value_len_out)
+const uint8_t *pp_info_get_ssl_key_alg(const pp_info_t *pp_info, uint16_t *length)
 {
-    return pp_info_get_tlv_value(pp_info, PP2_SUBTYPE_SSL_KEY_ALG, 0, value_len_out);
+    return pp_info_get_tlv_value(pp_info, PP2_SUBTYPE_SSL_KEY_ALG, 0, length);
 }
 
-const uint8_t *pp_info_get_ssl_netns(const pp_info_t *pp_info, uint16_t *value_len_out)
+const uint8_t *pp_info_get_ssl_netns(const pp_info_t *pp_info, uint16_t *length)
 {
-    return pp_info_get_tlv_value(pp_info, PP2_TYPE_NETNS, 0, value_len_out);
+    return pp_info_get_tlv_value(pp_info, PP2_TYPE_NETNS, 0, length);
 }
 
-const uint8_t *pp_info_get_aws_vpce_id(const pp_info_t *pp_info, uint16_t *value_len_out)
+const uint8_t *pp_info_get_aws_vpce_id(const pp_info_t *pp_info, uint16_t *length)
 {
-    return pp_info_get_tlv_value(pp_info, PP2_TYPE_AWS, PP2_SUBTYPE_AWS_VPCE_ID, value_len_out);
+    return pp_info_get_tlv_value(pp_info, PP2_TYPE_AWS, PP2_SUBTYPE_AWS_VPCE_ID, length);
 }
 
-const uint8_t* pp_info_get_azure_linkid(const pp_info_t *pp_info, uint16_t *value_len_out)
+const uint8_t *pp_info_get_azure_linkid(const pp_info_t *pp_info, uint16_t *length)
 {
-    return pp_info_get_tlv_value(pp_info, PP2_TYPE_AZURE, PP2_SUBTYPE_AZURE_PRIVATEENDPOINT_LINKID, value_len_out);
+    return pp_info_get_tlv_value(pp_info, PP2_TYPE_AZURE, PP2_SUBTYPE_AZURE_PRIVATEENDPOINT_LINKID, length);
 }
 
 void pp_info_clear(pp_info_t *pp_info)
@@ -391,33 +392,26 @@ void pp_info_clear(pp_info_t *pp_info)
     memset(pp_info, 0, sizeof(*pp_info));
 }
 
-uint8_t *pp2_create_hdr(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp2_hdr_len, uint32_t *error)
+uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, uint32_t *error)
 {
     proxy_hdr_v2_t proxy_hdr_v2 = {
         .sig = "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A",
-        .ver_cmd = pp_info->pp2_info.local ? '\x20' : '\x21',
+        .ver_cmd = '\x21',
     };
-
-    uint8_t transport_protocol = fam & 0x0f;
-    if (transport_protocol != 0x0 && transport_protocol != 0x1 && transport_protocol != 0x2)
-    {
-        *error = ERR_PP2_TRANSPORT_FAMILY;
-        return NULL;
-    }
 
     uint16_t len;
     proxy_addr_t proxy_addr;
-    uint8_t address_family = fam >> 4;
-    if (address_family == 0x0)
+    if (pp_info->address_family == ADDR_FAMILY_UNSPEC)
     {
         len = 0;
+        proxy_hdr_v2.ver_cmd = '\x20';
         if (!pp_info->pp2_info.local)
         {
-            *error = ERR_PP2_TRANSPORT_FAMILY;
+            *error = ERR_PP2_CMD;
             return NULL;
         }
     }
-    else if (address_family == 0x1)
+    else if (pp_info->address_family == ADDR_FAMILY_INET)
     {
         len = 12;
         if (inet_pton(AF_INET, pp_info->src_addr, &proxy_addr.ipv4_addr.src_addr) != 1)
@@ -433,7 +427,7 @@ uint8_t *pp2_create_hdr(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp2_hdr
         proxy_addr.ipv4_addr.src_port = htons(pp_info->src_port);
         proxy_addr.ipv4_addr.dst_port = htons(pp_info->dst_port);
     }
-    else if (address_family == 0x2)
+    else if (pp_info->address_family == ADDR_FAMILY_INET6)
     {
         len = 36;
         if (inet_pton(AF_INET6, pp_info->src_addr, &proxy_addr.ipv6_addr.src_addr) != 1)
@@ -449,7 +443,7 @@ uint8_t *pp2_create_hdr(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp2_hdr
         proxy_addr.ipv6_addr.src_port = htons(pp_info->src_port);
         proxy_addr.ipv6_addr.dst_port = htons(pp_info->dst_port);
     }
-    else if (address_family == 0x3)
+    else if (pp_info->address_family == ADDR_FAMILY_UNIX)
     {
         len = 216;
         memcpy(proxy_addr.unix_addr.src_addr, pp_info->src_addr, sizeof(pp_info->src_addr));
@@ -457,10 +451,17 @@ uint8_t *pp2_create_hdr(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp2_hdr
     }
     else
     {
-        *error = ERR_PP2_TRANSPORT_FAMILY;
+        *error = ERR_PP2_ADDR_FAMILY;
         return NULL;
     }
-    proxy_hdr_v2.fam = fam;
+
+    if (pp_info->transport_protocol > TRANSPORT_PROTOCOL_DGRAM)
+    {
+        *error = ERR_PP2_TRANSPORT_PROTOCOL;
+        return NULL;
+    }
+
+    proxy_hdr_v2.fam = pp_info->address_family << 4 | pp_info->transport_protocol;
     proxy_hdr_v2.len = htons(len);
 
     /* Create the PROXY protocol header */
@@ -478,32 +479,44 @@ uint8_t *pp2_create_hdr(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp2_hdr
     return pp2_hdr;
 }
 
-static uint8_t *pp1_create_hdr(uint8_t fam, const pp_info_t *pp_info, uint32_t *pp1_hdr_len, uint32_t *error)
+static uint8_t *pp1_create_hdr(const pp_info_t *pp_info, uint16_t *pp1_hdr_len, uint32_t *error)
 {
-    if (fam != AF_INET && fam != AF_INET6)
+    if (pp_info->transport_protocol != TRANSPORT_PROTOCOL_STREAM)
     {
         *error = ERR_PP1_TRANSPORT_FAMILY;
         return NULL;
     }
 
-    char block[PP1_MAX_LENGHT];
     /* sprintf() as snprintf does not exist in ANSI C */
-    if (strlen(pp_info->src_addr) > 39)
+    char block[PP1_MAX_LENGHT];
+    if (pp_info->address_family == ADDR_FAMILY_UNSPEC)
     {
-        *error = ERR_PP1_IPV4_SRC_IP;
+        *pp1_hdr_len = sprintf(block, "PROXY UNKNOWN%s", crlf);
+    }
+    else if (pp_info->address_family == ADDR_FAMILY_INET || pp_info->address_family == ADDR_FAMILY_INET6)
+    {
+        const char *fam = pp_info->address_family == ADDR_FAMILY_INET ? "TCP4" : "TCP6";
+        if (strlen(pp_info->src_addr) > 39)
+        {
+            *error = ERR_PP1_IPV4_SRC_IP;
+            return NULL;
+        }
+        if (strlen(pp_info->dst_addr) > 39)
+        {
+            *error = ERR_PP1_IPV4_DST_IP;
+            return NULL;
+        }
+        char src_addr[39+1];
+        char dst_addr[39+1];
+        memcpy(src_addr, pp_info->src_addr, sizeof(src_addr));
+        memcpy(dst_addr, pp_info->dst_addr, sizeof(dst_addr));
+        *pp1_hdr_len = sprintf(block, "PROXY %s %s %s %hu %hu%s", fam, src_addr, dst_addr, pp_info->src_port, pp_info->dst_port, crlf);
+    }
+    else
+    {
+        *error = ERR_PP1_TRANSPORT_FAMILY;
         return NULL;
     }
-    if (strlen(pp_info->dst_addr) > 39)
-    {
-        *error = ERR_PP1_IPV4_DST_IP;
-        return NULL;
-    }
-    char src_addr[39+1];
-    char dst_addr[39+1];
-    memcpy(src_addr, pp_info->src_addr, sizeof(src_addr));
-    memcpy(dst_addr, pp_info->dst_addr, sizeof(dst_addr));
-    *pp1_hdr_len = sprintf(block, "PROXY %s %s %s %hu %hu%s",
-        fam == AF_INET ? "TCP4" : "TCP6", src_addr, dst_addr, pp_info->src_port, pp_info->dst_port, crlf);
     
     /* Create the PROXY protocol header */
     uint8_t *pp1_hdr = malloc(*pp1_hdr_len);
@@ -517,15 +530,15 @@ static uint8_t *pp1_create_hdr(uint8_t fam, const pp_info_t *pp_info, uint32_t *
     return pp1_hdr;
 }
 
-uint8_t *pp_create_hdr(uint8_t version, uint8_t fam, const pp_info_t *pp_info, uint32_t *pp_hdr_len, uint32_t *error)
+uint8_t *pp_create_hdr(uint8_t version, const pp_info_t *pp_info, uint16_t *pp_hdr_len, uint32_t *error)
 {
     if (version == 1)
     {
-        return pp1_create_hdr(fam, pp_info, pp_hdr_len, error);
+        return pp1_create_hdr(pp_info, pp_hdr_len, error);
     }
     else if (version == 2)
     {
-        return pp2_create_hdr(fam, pp_info, pp_hdr_len, error);
+        return pp2_create_hdr(pp_info, pp_hdr_len, error);
     }
     else
     {
@@ -632,10 +645,10 @@ static uint32_t crc32c(const uint8_t *buf, uint32_t len)
 }
 
 /* Verifies and parses a version 2 PROXY protocol header */
-static int32_t pp2_parse_hdr(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
+static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t *pp_info)
 {
-    const uint8_t *ppv2_hdr = pkt;
-    const proxy_hdr_v2_t *proxy_hdr_v2 = (proxy_hdr_v2_t *) pkt;
+    const uint8_t *ppv2_hdr = buffer;
+    const proxy_hdr_v2_t *proxy_hdr_v2 = (proxy_hdr_v2_t *) buffer;
 
     /* Constant 12 bytes block containing the protocol signature */
     if (memcmp(proxy_hdr_v2->sig, "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A", sizeof(proxy_hdr_v2->sig)))
@@ -668,41 +681,41 @@ static int32_t pp2_parse_hdr(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
         return ERR_PP2_CMD;
     }
 
-    /*
-     * The 14th byte contains the transport protocol and address family
-     * \x00 : UNSPEC
-     * \x11 : TCP over IPv4
-     * \x12 : UDP over IPv4
-     * \x21 : TCP over IPv6
-     * \x22 : UDP over IPv6
-     * \x31 : UNIX stream
-     * \x32 : UNIX datagram
-     */
+    /* The 14th byte contains the transport protocol and address family */
+    /* The highest 4 bits contain the address family */
     uint8_t fam;
-    if (proxy_hdr_v2->fam == '\x00' || cmd == 0x0)
+    pp_info->address_family = proxy_hdr_v2->fam >> 4;
+    if (pp_info->address_family == ADDR_FAMILY_UNSPEC)
     {
         fam = AF_UNSPEC;
     }
-    else if (proxy_hdr_v2->fam == '\x11' || proxy_hdr_v2->fam == '\x12')
+    else if (pp_info->address_family == ADDR_FAMILY_INET)
     {
         fam = AF_INET;
     }
-    else if (proxy_hdr_v2->fam == '\x21' || proxy_hdr_v2->fam == '\x22')
+    else if (pp_info->address_family == ADDR_FAMILY_INET6)
     {
         fam = AF_INET6;
     }
-    else if (proxy_hdr_v2->fam == '\x31' || proxy_hdr_v2->fam == '\x32')
+    else if (pp_info->address_family == ADDR_FAMILY_UNIX)
     {
         fam = AF_UNIX;
     }
     else
     {
-        return ERR_PP2_TRANSPORT_FAMILY;
+        return ERR_PP2_ADDR_FAMILY;
     }
+    /* the lowest 4 bits contain the protocol */
+    pp_info->transport_protocol = proxy_hdr_v2->fam & 0x0f;
+    if (pp_info->transport_protocol > TRANSPORT_PROTOCOL_DGRAM)
+    {
+        return ERR_PP2_TRANSPORT_PROTOCOL;
+    }
+
 
     /* The 15th and 16th bytes is the address length in bytes in network byte order */
     uint16_t len = ntohs(proxy_hdr_v2->len);
-    if (pktlen < sizeof(proxy_hdr_v2_t) + len)
+    if (buffer_length < sizeof(proxy_hdr_v2_t) + len)
     {
         return ERR_PP2_LENGTH;
     }
@@ -715,8 +728,8 @@ static int32_t pp2_parse_hdr(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
      * - source layer 4 address if any, in network byte order (port)
      * - destination layer 4 address if any, in network byte order (port)
      */
-    pkt += sizeof(proxy_hdr_v2_t);
-    proxy_addr_t *addr = (proxy_addr_t *) pkt;
+    buffer += sizeof(proxy_hdr_v2_t);
+    proxy_addr_t *addr = (proxy_addr_t *) buffer;
     uint16_t tlv_vectors_len = 0;
     if (fam == AF_UNSPEC)
     {
@@ -736,7 +749,7 @@ static int32_t pp2_parse_hdr(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
         pp_info->src_port = ntohs(addr->ipv4_addr.src_port);
         pp_info->dst_port = ntohs(addr->ipv4_addr.dst_port);
 
-        pkt += sizeof(addr->ipv4_addr);
+        buffer += sizeof(addr->ipv4_addr);
         tlv_vectors_len = len - sizeof(addr->ipv4_addr);
     }
     else if (fam == AF_INET6 && len >= sizeof(addr->ipv6_addr))
@@ -753,7 +766,7 @@ static int32_t pp2_parse_hdr(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
         pp_info->src_port = ntohs(addr->ipv6_addr.src_port);
         pp_info->dst_port = ntohs(addr->ipv6_addr.dst_port);
 
-        pkt += sizeof(addr->ipv6_addr);
+        buffer += sizeof(addr->ipv6_addr);
         tlv_vectors_len = len - sizeof(addr->ipv6_addr);
     }
     else if (fam == AF_UNIX && len >= sizeof(addr->unix_addr))
@@ -774,7 +787,7 @@ static int32_t pp2_parse_hdr(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
     }
     while (tlv_vectors_len > 3)
     {
-        pp2_tlv_t *pp2_tlv = (pp2_tlv_t *) pkt;
+        pp2_tlv_t *pp2_tlv = (pp2_tlv_t *) buffer;
         uint16_t pp2_tlv_len = pp2_tlv->length_hi << 8 | pp2_tlv->length_lo;
         uint16_t pp2_tlv_offset = 3 + pp2_tlv_len;
         if (pp2_tlv_offset > tlv_vectors_len)
@@ -922,19 +935,19 @@ static int32_t pp2_parse_hdr(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
         default:
             break;
         }
-        pkt += pp2_tlv_offset;
+        buffer += pp2_tlv_offset;
         tlv_vectors_len -= pp2_tlv_offset;
     }
 
     return sizeof(proxy_hdr_v2_t) + len;
 }
 
-static int32_t pp1_parse_hdr(const uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
+static int32_t pp1_parse_hdr(const uint8_t *buffer, uint32_t buffer_length, pp_info_t *pp_info)
 {
     char block[PP1_MAX_LENGHT] = { 0 };
     char *ptr = block;
-    int32_t length = 0;
-    memcpy(block, pkt, pktlen < PP1_MAX_LENGHT ? pktlen : PP1_MAX_LENGHT);
+    int32_t pp1_hdr_len = 0;
+    memcpy(block, buffer, buffer_length < PP1_MAX_LENGHT ? buffer_length : PP1_MAX_LENGHT);
 
     char *block_end = strstr(block, crlf);
     if (!block_end)
@@ -942,7 +955,7 @@ static int32_t pp1_parse_hdr(const uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_
         return ERR_PP1_CRLF;
     }
     block_end += strlen(crlf);
-    length = block_end - block;
+    pp1_hdr_len = block_end - block;
 
     /* PROXY */
     if (memcmp(block, "PROXY", 5))
@@ -963,9 +976,11 @@ static int32_t pp1_parse_hdr(const uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_
     if (!inet_family)
     {
         /* Unknown connection (short form) */
-        if (pktlen == 15 || !memcmp(ptr, "UNKNOWN", 7))
+        if (pp1_hdr_len == 15 || !memcmp(ptr, "UNKNOWN", 7))
         {
-            return length;
+            pp_info->address_family = ADDR_FAMILY_UNSPEC;
+            pp_info->transport_protocol = TRANSPORT_PROTOCOL_UNSPEC;
+            return pp1_hdr_len;
         }
         return ERR_PP1_TRANSPORT_FAMILY;
     }
@@ -973,17 +988,23 @@ static int32_t pp1_parse_hdr(const uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_
     if (!memcmp(ptr, "TCP4", 4))
     {
         sa_family = AF_INET;
+        pp_info->address_family = ADDR_FAMILY_INET;
+        pp_info->transport_protocol = TRANSPORT_PROTOCOL_STREAM;
         ptr += 4;
     }
     else if (!memcmp(ptr, "TCP6", 4))
     {
         sa_family = AF_INET6;
+        pp_info->address_family = ADDR_FAMILY_INET6;
+        pp_info->transport_protocol = TRANSPORT_PROTOCOL_STREAM;
         ptr += 4;
     }
     else if (!memcmp(ptr, "UNKNOWN", 7))
     {
         /* The receiver must ignore anything presented before the CRLF is found */
-        return length;
+        pp_info->address_family = ADDR_FAMILY_UNSPEC;
+        pp_info->transport_protocol = TRANSPORT_PROTOCOL_UNSPEC;
+        return pp1_hdr_len;
     }
     else
     {
@@ -1084,19 +1105,19 @@ static int32_t pp1_parse_hdr(const uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_
         return ERR_PP1_CRLF;
     }
 
-    return length;
+    return pp1_hdr_len;
 }
 
-int32_t pp_parse_hdr(uint8_t *pkt, uint32_t pktlen, pp_info_t *pp_info)
+int32_t pp_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t *pp_info)
 {
     memset(pp_info, 0, sizeof(*pp_info));
-    if (pktlen >= 16 && !memcmp(pkt, "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A", 12))
+    if (buffer_length >= 16 && !memcmp(buffer, "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A", 12))
     {
-        return pp2_parse_hdr(pkt, pktlen, pp_info);
+        return pp2_parse_hdr(buffer, buffer_length, pp_info);
     }
-    else if (pktlen >= 8 && !memcmp(pkt, "\x50\x52\x4F\x58\x59", 5))
+    else if (buffer_length >= 8 && !memcmp(buffer, "\x50\x52\x4F\x58\x59", 5))
     {
-        return pp1_parse_hdr(pkt, pktlen, pp_info);;
+        return pp1_parse_hdr(buffer, buffer_length, pp_info);;
     }
     else
     {

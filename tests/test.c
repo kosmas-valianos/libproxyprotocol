@@ -66,7 +66,6 @@ typedef struct
 {
     const char *name;
     uint8_t     version;
-    uint8_t     fam;
     pp_info_t   pp_info_in;
     uint8_t    *raw_bytes_in;
     uint32_t    raw_bytes_in_length;
@@ -138,8 +137,51 @@ static uint8_t pp_verify_tlvs(const pp_info_t *pp_info, const test_tlv_t (*expec
         const test_tlv_t *test_tlv = &(*expected_tlvs)[i];
         if (test_tlv->type != 0)
         {
-            uint16_t tlv_value_len;
-            const uint8_t *tlv_value = pp_info_get_tlv_value(pp_info, test_tlv->type, test_tlv->subtype, &tlv_value_len);
+            uint16_t tlv_value_len = 0;
+            const uint8_t *tlv_value = NULL;
+            switch (test_tlv->type)
+            {
+            case PP2_TYPE_ALPN:
+                tlv_value = pp_info_get_alpn(pp_info, &tlv_value_len);
+                break;
+            case PP2_TYPE_AUTHORITY:
+                tlv_value = pp_info_get_authority(pp_info, &tlv_value_len);
+                break;
+            case PP2_TYPE_CRC32C:
+                tlv_value = pp_info_get_crc32c(pp_info, &tlv_value_len);
+                break;
+            case PP2_TYPE_NOOP:
+                break;
+            case PP2_TYPE_UNIQUE_ID:
+                tlv_value = pp_info_get_unique_id(pp_info, &tlv_value_len);
+                break;
+            case PP2_SUBTYPE_SSL_VERSION:
+                tlv_value = pp_info_get_ssl_version(pp_info, &tlv_value_len);
+                break;
+            case PP2_SUBTYPE_SSL_CN:
+                tlv_value = pp_info_get_ssl_cn(pp_info, &tlv_value_len);
+                break;
+            case PP2_SUBTYPE_SSL_CIPHER:
+                tlv_value = pp_info_get_ssl_cipher(pp_info, &tlv_value_len);
+                break;
+            case PP2_SUBTYPE_SSL_SIG_ALG:
+                tlv_value = pp_info_get_ssl_sig_alg(pp_info, &tlv_value_len);
+                break;
+            case PP2_SUBTYPE_SSL_KEY_ALG:
+                tlv_value = pp_info_get_ssl_key_alg(pp_info, &tlv_value_len);
+                break;
+            case PP2_TYPE_NETNS:
+                tlv_value = pp_info_get_ssl_netns(pp_info, &tlv_value_len);
+                break;
+            case PP2_TYPE_AWS:
+                tlv_value = pp_info_get_aws_vpce_id(pp_info, &tlv_value_len);
+                break;
+            case PP2_TYPE_AZURE:
+                tlv_value = pp_info_get_azure_linkid(pp_info, &tlv_value_len);
+                break;
+            default:
+                break;
+            }
             if (!tlv_value || tlv_value_len != test_tlv->value_len || memcmp(tlv_value, test_tlv->value, tlv_value_len))
             {
                 return 0;
@@ -151,7 +193,11 @@ static uint8_t pp_verify_tlvs(const pp_info_t *pp_info, const test_tlv_t (*expec
 
 static uint8_t pp_info_equal(const pp_info_t *pp_info_a, const pp_info_t *pp_info_b)
 {
-    if (pp_info_a->pp2_info.local != pp_info_b->pp2_info.local)
+    if (pp_info_a->address_family != pp_info_b->address_family)
+    {
+        return 0;
+    }
+    if (pp_info_a->transport_protocol != pp_info_b->transport_protocol)
     {
         return 0;
     }
@@ -200,6 +246,8 @@ int main()
             .raw_bytes_in_length = sizeof(pp2_hdr_vpce),
             .rc_expected = sizeof(pp2_hdr_vpce),
             .pp_info_out_expected = {
+                .address_family = ADDR_FAMILY_INET,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
                 .src_addr = "192.168.10.100",
                 .dst_addr = "192.168.11.90",
                 .src_port = 42332,
@@ -222,8 +270,9 @@ int main()
         {
             .name = "v2 PROXY protocol header: PROXY, TCP over IPv4 create and parse",
             .version = 2,
-            .fam = '\x11',
             .pp_info_in = {
+                .address_family = ADDR_FAMILY_INET,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
                 .src_addr = "10.10.1.100",
                 .dst_addr = "10.10.2.100",
                 .src_port = 51442,
@@ -232,10 +281,11 @@ int main()
             .pp_info_out_expected = tests[3].pp_info_in,
         },
         {
-            .name = "v1 PROXY protocol header: AF_INET create and parse",
+            .name = "v1 PROXY protocol header: TCP4 create and parse",
             .version = 1,
-            .fam = AF_INET,
             .pp_info_in = {
+                .address_family = ADDR_FAMILY_INET,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
                 .src_addr = "10.10.1.100",
                 .dst_addr = "10.10.2.100",
                 .src_port = 51442,
@@ -246,8 +296,9 @@ int main()
         {
             .name = "v2 PROXY protocol header: PROXY, UNIX stream create and parse",
             .version = 2,
-            .fam = '\x31',
             .pp_info_in = {
+                .address_family = ADDR_FAMILY_UNIX,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
                 .src_addr = "/tmp/testsocket1.socket",
                 .dst_addr = "/tmp/testsocket2.socket",
             },
@@ -256,15 +307,19 @@ int main()
         {
             .name = "v2 PROXY protocol header: LOCAL, AF_UNSPEC create and parse",
             .version = 2,
-            .fam = '\x00',
-            .pp_info_in = { .pp2_info.local = 1 },
-            .pp_info_out_expected = { .pp2_info.local = 1 },
+            .pp_info_in = {
+                .address_family = ADDR_FAMILY_UNSPEC,
+                .transport_protocol = TRANSPORT_PROTOCOL_UNSPEC,
+                .pp2_info.local = 1
+            },
+            .pp_info_out_expected = tests[6].pp_info_in,
         },
         {
             .name = "v2 PROXY protocol header: PROXY, TCP over IPv6 create and parse",
             .version = 2,
-            .fam = '\x21',
             .pp_info_in = {
+                .address_family = ADDR_FAMILY_INET6,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
                 .src_addr = "fd00:dead:beef::2",
                 .dst_addr = "fd00:beef:dead::3",
                 .src_port = 51442,
@@ -273,10 +328,11 @@ int main()
             .pp_info_out_expected = tests[7].pp_info_in,
         },
         {
-            .name = "v1 PROXY protocol header: AF_INET6 create and parse",
+            .name = "v1 PROXY protocol header: TCP6 create and parse",
             .version = 1,
-            .fam = AF_INET6,
             .pp_info_in = {
+                .address_family = ADDR_FAMILY_INET6,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
                 .src_addr = "fd00:dead:beef::2",
                 .dst_addr = "fd00:beef:dead::3",
                 .src_port = 51442,
@@ -291,6 +347,8 @@ int main()
             .raw_bytes_in_length = sizeof(pp2_hdr_ssl),
             .rc_expected = sizeof(pp2_hdr_ssl),
             .pp_info_out_expected = {
+                .address_family = ADDR_FAMILY_INET,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
                 .src_addr = "192.168.10.100",
                 .dst_addr = "192.168.11.90",
                 .src_port = 42332,
@@ -347,9 +405,9 @@ int main()
         }
         else
         {
-            uint32_t pp_hdr_len;
+            uint16_t pp_hdr_len;
             uint32_t error;
-            uint8_t *pp_hdr = pp_create_hdr(tests[i].version, tests[i].fam, &tests[i].pp_info_in, &pp_hdr_len, &error);
+            uint8_t *pp_hdr = pp_create_hdr(tests[i].version, &tests[i].pp_info_in, &pp_hdr_len, &error);
             if (!pp_hdr || error != ERR_NULL)
             {
                 printf("FAILED\n");
@@ -375,7 +433,7 @@ int main()
     printf("Running test: pp_strerror()...");
     if (strcmp("No error", pp_strerror(ERR_NULL))
      || strcmp("v1 PROXY protocol header: invalid dst port", pp_strerror(ERR_PP1_DST_PORT))
-     || pp_strerror(-28) || pp_strerror(1))
+     || pp_strerror(-29) || pp_strerror(1))
     {
         printf("FAILED\n");
         return EXIT_FAILURE;
