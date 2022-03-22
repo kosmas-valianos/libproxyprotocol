@@ -90,6 +90,29 @@ typedef union
     } unix_addr;
 } proxy_addr_t;
 
+/* Type-Length-Value (TLV vectors) */
+#define PP2_TYPE_ALPN           0x01
+#define PP2_TYPE_AUTHORITY      0x02
+#define PP2_TYPE_CRC32C         0x03
+#define PP2_TYPE_NOOP           0x04
+#define PP2_TYPE_UNIQUE_ID      0x05
+#define PP2_TYPE_SSL            0x20
+#define PP2_SUBTYPE_SSL_VERSION 0x21
+#define PP2_SUBTYPE_SSL_CN      0x22
+#define PP2_SUBTYPE_SSL_CIPHER  0x23
+#define PP2_SUBTYPE_SSL_SIG_ALG 0x24
+#define PP2_SUBTYPE_SSL_KEY_ALG 0x25
+#define PP2_TYPE_NETNS          0x30
+/* Custom TLVs */
+#define PP2_TYPE_AWS            0xEA
+#define PP2_TYPE_AZURE          0xEE
+
+/* PP2_TYPE_AWS subtypes */
+#define PP2_SUBTYPE_AWS_VPCE_ID 0x01
+
+/* PP2_TYPE_AZURE subtypes */
+#define PP2_SUBTYPE_AZURE_PRIVATEENDPOINT_LINKID 0x01
+
 typedef struct
 {
     uint8_t type;
@@ -97,6 +120,11 @@ typedef struct
     uint8_t length_lo;
     uint8_t value[1];
 } pp2_tlv_t;
+
+/* PP2_TYPE_SSL <client> bit field  */
+#define PP2_CLIENT_SSL       0x01
+#define PP2_CLIENT_CERT_CONN 0x02
+#define PP2_CLIENT_CERT_SESS 0x04
 
 typedef struct
 {
@@ -263,7 +291,7 @@ static void tlv_array_clear(tlv_array_t *tlv_array)
     tlv_array->tlvs = NULL;
 }
 
-const uint8_t *pp_info_get_tlv_value(const pp_info_t *pp_info, uint8_t type, uint8_t subtype, uint16_t *value_len_out)
+static const uint8_t *pp_info_get_tlv_value(const pp_info_t *pp_info, uint8_t type, uint8_t subtype, uint16_t *value_len_out)
 {
     *value_len_out = 0;
     if (!pp_info->tlv_array->tlvs || !pp_info->tlv_array->len)
@@ -291,6 +319,66 @@ const uint8_t *pp_info_get_tlv_value(const pp_info_t *pp_info, uint8_t type, uin
         }
     }
     return NULL;
+}
+
+const uint8_t *pp_info_get_alpn(const pp_info_t *pp_info, uint16_t *value_len_out)
+{
+    return pp_info_get_tlv_value(pp_info, PP2_TYPE_ALPN, 0, value_len_out);
+}
+
+const uint8_t *pp_info_get_authority(const pp_info_t *pp_info, uint16_t *value_len_out)
+{
+    return pp_info_get_tlv_value(pp_info, PP2_TYPE_AUTHORITY, 0, value_len_out);
+}
+
+const uint8_t *pp_info_get_crc32c(const pp_info_t *pp_info, uint16_t *value_len_out)
+{
+    return pp_info_get_tlv_value(pp_info, PP2_TYPE_CRC32C, 0, value_len_out);
+}
+
+const uint8_t *pp_info_get_unique_id(const pp_info_t *pp_info, uint16_t *value_len_out)
+{
+    return pp_info_get_tlv_value(pp_info, PP2_TYPE_UNIQUE_ID, 0, value_len_out);
+}
+
+const uint8_t *pp_info_get_ssl_version(const pp_info_t *pp_info, uint16_t *value_len_out)
+{
+    return pp_info_get_tlv_value(pp_info, PP2_SUBTYPE_SSL_VERSION, 0, value_len_out);
+}
+
+const uint8_t *pp_info_get_ssl_cn(const pp_info_t *pp_info, uint16_t *value_len_out)
+{
+    return pp_info_get_tlv_value(pp_info, PP2_SUBTYPE_SSL_CN, 0, value_len_out);
+}
+
+const uint8_t *pp_info_get_ssl_cipher(const pp_info_t *pp_info, uint16_t *value_len_out)
+{
+    return pp_info_get_tlv_value(pp_info, PP2_SUBTYPE_SSL_CIPHER, 0, value_len_out);
+}
+
+const uint8_t *pp_info_get_ssl_sig_alg(const pp_info_t *pp_info, uint16_t *value_len_out)
+{
+    return pp_info_get_tlv_value(pp_info, PP2_SUBTYPE_SSL_SIG_ALG, 0, value_len_out);
+}
+
+const uint8_t *pp_info_get_ssl_key_alg(const pp_info_t *pp_info, uint16_t *value_len_out)
+{
+    return pp_info_get_tlv_value(pp_info, PP2_SUBTYPE_SSL_KEY_ALG, 0, value_len_out);
+}
+
+const uint8_t *pp_info_get_ssl_netns(const pp_info_t *pp_info, uint16_t *value_len_out)
+{
+    return pp_info_get_tlv_value(pp_info, PP2_TYPE_NETNS, 0, value_len_out);
+}
+
+const uint8_t *pp_info_get_aws_vpce_id(const pp_info_t *pp_info, uint16_t *value_len_out)
+{
+    return pp_info_get_tlv_value(pp_info, PP2_TYPE_AWS, PP2_SUBTYPE_AWS_VPCE_ID, value_len_out);
+}
+
+const uint8_t* pp_info_get_azure_linkid(const pp_info_t *pp_info, uint16_t *value_len_out)
+{
+    return pp_info_get_tlv_value(pp_info, PP2_TYPE_AZURE, PP2_SUBTYPE_AZURE_PRIVATEENDPOINT_LINKID, value_len_out);
 }
 
 void pp_info_clear(pp_info_t *pp_info)
