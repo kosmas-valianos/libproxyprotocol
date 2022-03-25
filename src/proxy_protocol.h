@@ -97,17 +97,17 @@ typedef struct
     tlv_array_t *tlv_array;
 } pp_info_t;
 
-/* Returns a descriptive error message.
+/* Returns a descriptive error message
  *
- * error    int32_t value from other API functions.
- * return   Pointer to the descriptive message if error value is recognized else NULL.
+ * error    int32_t value from other API functions
+ * return   Pointer to the descriptive message if error value is recognized else NULL
  */
 const char *pp_strerror(int32_t error);
 
-/* Searches for the specified TLV and returns its value.
+/* Searches for the specified TLV and returns its value
  *
- * pp_info  Pointer to a pp_info_t structure used in pp_parse().
- * length   Pointer to a uint16_t where the TLV's value length will be set.
+ * pp_info  Pointer to a pp_info_t structure used in pp_parse()
+ * length   Pointer to a uint16_t where the TLV's value length will be set
  * return   Pointer to a buffer holding the TLV's value if found else NULL.
  *          In case of US-ASCII value the buffer is NULL terminated
  */
@@ -123,28 +123,34 @@ const uint8_t *pp_info_get_ssl_key_alg(const pp_info_t *pp_info, uint16_t *lengt
 const uint8_t *pp_info_get_ssl_netns(const pp_info_t *pp_info, uint16_t *length);
 const uint8_t *pp_info_get_aws_vpce_id(const pp_info_t *pp_info, uint16_t *length);
 const uint8_t *pp_info_get_azure_linkid(const pp_info_t *pp_info, uint16_t *length);
-void           pp_info_clear(pp_info_t *pp_info);
 
-/* Inpects the buffer for a PROXY protocol header and extracts all the information if any.
+/* Clears the pp_info_t structure and frees any allocated memory associated with it. Shall always be called after a call to pp_parse_hdr()
+ *
+ * pp_info  Pointer to a filled pp_info_t structure which has been used to a previous call to pp_parse_hdr()
+ */
+void pp_info_clear(pp_info_t *pp_info);
+
+/* Creates a PROXY protocol header considering the information inside the pp_info.
  *
  * version:     0 Create a v1 PROXY protocol header
  *              1 Create a v2 PROXY protocol header
- * pp_info      Pointer to a filled pp_info_t structure whose information will be used for the creation of the PROXY protocol header.
- * pp_hdr_len   Pointer to a uint16_t where the length of the create PROXY protocol header will be set.
- * error        Pointer to a uint32_t where the error value will be set.
+ * pp_info      Pointer to a filled pp_info_t structure whose information will be used for the creation of the PROXY protocol header
+ * pp_hdr_len   Pointer to a uint16_t where the length of the create PROXY protocol header will be set
+ * error        Pointer to a uint32_t where the error value will be set
  *                  ERR_NULL No error occurred
  *                  < 0      Error
+ * return       Pointer to a heap allocated buffer containing the PROXY protocol header. Must be freed with free()
  */
-uint8_t    *pp_create_hdr(uint8_t version, const pp_info_t *pp_info, uint16_t *pp_hdr_len, uint32_t *error);
+uint8_t *pp_create_hdr(uint8_t version, const pp_info_t *pp_info, uint16_t *pp_hdr_len, int32_t *error);
 
-/* Inpects the buffer for a PROXY protocol header and extracts all the information if any.
+/* Inpects the buffer for a PROXY protocol header and extracts all the information if any
  *
- * buffer   Buffer to be inspected and parsed. Typically the buffer given for a read operation
- * length   Buffer's length. Typically the bytes read from the read operation
- * pp_info  Pointer to a pp_info_t structure which will get filled with all the extracted information.
- * return   >  0 Length of the PROXY protocol header.
- *          == 0 No PROXY protocol header found.
- *          <  0 Error occurred. pp_strerror() with that value can be used to get a descriptive message
+ * buffer           Buffer to be inspected and parsed. Typically the buffer given for a read operation
+ * buffer_length    Buffer's length. Typically the bytes read from the read operation
+ * pp_info          Pointer to a pp_info_t structure which will get filled with all the extracted information
+ * return           >  0 Length of the PROXY protocol header
+ *                  == 0 No PROXY protocol header found
+ *                  <  0 Error occurred. pp_strerror() with that value can be used to get a descriptive message
  */
 int32_t pp_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t *pp_info);
 

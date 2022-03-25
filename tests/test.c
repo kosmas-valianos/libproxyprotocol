@@ -406,7 +406,7 @@ int main()
         else
         {
             uint16_t pp_hdr_len;
-            uint32_t error;
+            int32_t error;
             uint8_t *pp_hdr = pp_create_hdr(tests[i].version, &tests[i].pp_info_in, &pp_hdr_len, &error);
             if (!pp_hdr || error != ERR_NULL)
             {
