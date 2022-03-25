@@ -24,62 +24,35 @@
 enum
 {
     ERR_NULL,
-    ERR_PP_VERSION           = -1,
-    ERR_PP2_SIG              = -2,
-    ERR_PP2_VERSION          = -3,
-    ERR_PP2_CMD              = -4,
-    ERR_PP2_TRANSPORT_FAMILY = -5,
-    ERR_PP2_LENGTH           = -6,
-    ERR_PP2_IPV4_SRC_IP      = -7,
-    ERR_PP2_IPV4_DST_IP      = -8,
-    ERR_PP2_IPV6_SRC_IP      = -9,
-    ERR_PP2_IPV6_DST_IP      = -10,
-    ERR_PP2_TLV_LENGTH       = -11,
-    ERR_PP2_TYPE_CRC32C      = -12,
-    ERR_PP2_TYPE_SSL         = -13,
-    ERR_PP2_TYPE_UNIQUE_ID   = -14,
-    ERR_PP2_TYPE_AWS         = -15,
-    ERR_PP2_TYPE_AZURE       = -16,
-    ERR_PP1_CRLF             = -17,
-    ERR_PP1_PROXY            = -18,
-    ERR_PP1_SPACE            = -19,
-    ERR_PP1_TRANSPORT_FAMILY = -20,
-    ERR_PP1_IPV4_SRC_IP      = -21,
-    ERR_PP1_IPV4_DST_IP      = -22,
-    ERR_PP1_IPV6_SRC_IP      = -23,
-    ERR_PP1_IPV6_DST_IP      = -24,
-    ERR_PP1_SRC_PORT         = -25,
-    ERR_PP1_DST_PORT         = -26,
-    ERR_HEAP_ALLOC           = -27,
+    ERR_PP_VERSION             = -1,
+    ERR_PP2_SIG                = -2,
+    ERR_PP2_VERSION            = -3,
+    ERR_PP2_CMD                = -4,
+    ERR_PP2_ADDR_FAMILY        = -5,
+    ERR_PP2_TRANSPORT_PROTOCOL = -6,
+    ERR_PP2_LENGTH             = -7,
+    ERR_PP2_IPV4_SRC_IP        = -8,
+    ERR_PP2_IPV4_DST_IP        = -9,
+    ERR_PP2_IPV6_SRC_IP        = -10,
+    ERR_PP2_IPV6_DST_IP        = -11,
+    ERR_PP2_TLV_LENGTH         = -12,
+    ERR_PP2_TYPE_CRC32C        = -13,
+    ERR_PP2_TYPE_SSL           = -14,
+    ERR_PP2_TYPE_UNIQUE_ID     = -15,
+    ERR_PP2_TYPE_AWS           = -16,
+    ERR_PP2_TYPE_AZURE         = -17,
+    ERR_PP1_CRLF               = -18,
+    ERR_PP1_PROXY              = -19,
+    ERR_PP1_SPACE              = -20,
+    ERR_PP1_TRANSPORT_FAMILY   = -21,
+    ERR_PP1_IPV4_SRC_IP        = -22,
+    ERR_PP1_IPV4_DST_IP        = -23,
+    ERR_PP1_IPV6_SRC_IP        = -24,
+    ERR_PP1_IPV6_DST_IP        = -25,
+    ERR_PP1_SRC_PORT           = -26,
+    ERR_PP1_DST_PORT           = -27,
+    ERR_HEAP_ALLOC             = -28,
 };
-
-/* Type-Length-Value (TLV vectors) */
-#define PP2_TYPE_ALPN           0x01
-#define PP2_TYPE_AUTHORITY      0x02
-#define PP2_TYPE_CRC32C         0x03
-#define PP2_TYPE_NOOP           0x04
-#define PP2_TYPE_UNIQUE_ID      0x05
-#define PP2_TYPE_SSL            0x20
-#define PP2_SUBTYPE_SSL_VERSION 0x21
-#define PP2_SUBTYPE_SSL_CN      0x22
-#define PP2_SUBTYPE_SSL_CIPHER  0x23
-#define PP2_SUBTYPE_SSL_SIG_ALG 0x24
-#define PP2_SUBTYPE_SSL_KEY_ALG 0x25
-#define PP2_TYPE_NETNS          0x30
-/* Custom TLVs */
-#define PP2_TYPE_AWS            0xEA
-#define PP2_TYPE_AZURE          0xEE
-
-/* PP2_TYPE_SSL <client> bit field  */
-#define PP2_CLIENT_SSL           0x01
-#define PP2_CLIENT_CERT_CONN     0x02
-#define PP2_CLIENT_CERT_SESS     0x04
-
-/* PP2_TYPE_AWS subtypes */
-#define PP2_SUBTYPE_AWS_VPCE_ID 0x01
-
-/* PP2_TYPE_AZURE subtypes */
-#define PP2_SUBTYPE_AZURE_PRIVATEENDPOINT_LINKID 0x01
 
 typedef struct _tlv_array_t tlv_array_t;
 
@@ -97,8 +70,25 @@ typedef struct
     pp2_ssl_info_t pp2_ssl_info;
 } pp2_info_t;
 
+enum
+{
+    ADDR_FAMILY_UNSPEC,
+    ADDR_FAMILY_INET,
+    ADDR_FAMILY_INET6,
+    ADDR_FAMILY_UNIX,
+};
+
+enum
+{
+    TRANSPORT_PROTOCOL_UNSPEC,
+    TRANSPORT_PROTOCOL_STREAM,
+    TRANSPORT_PROTOCOL_DGRAM,
+};
+
 typedef struct
 {
+    uint8_t      address_family;
+    uint8_t      transport_protocol;
     char         src_addr[108];
     char         dst_addr[108];
     uint16_t     src_port;
@@ -107,28 +97,55 @@ typedef struct
     tlv_array_t *tlv_array;
 } pp_info_t;
 
-const char *pp_strerror(int32_t error);
-uint8_t    *pp_info_get_tlv_value(const pp_info_t *pp_info, uint8_t type, uint8_t subtype, uint16_t *value_len_out);
-void        pp_info_clear(pp_info_t *pp_info);
-
-/*
- * version:
- *  v1 : 1
- *  v2 : 2
- * fam - v1:
- *  AF_INET
- *  AF_INET6
- * fam - v2:
- *  \x00 : UNSPEC
- *  \x11 : TCP over IPv4
- *  \x12 : UDP over IPv4
- *  \x21 : TCP over IPv6
- *  \x22 : UDP over IPv6
- *  \x31 : UNIX stream
- *  \x32 : UNIX datagram
+/* Returns a descriptive error message.
+ *
+ * error    int32_t value from other API functions.
+ * return   Pointer to the descriptive message if error value is recognized else NULL.
  */
-uint8_t    *pp_create_hdr(uint8_t version, uint8_t fam, const pp_info_t *pp_info, uint32_t *pp_hdr_len, uint32_t *error);
+const char *pp_strerror(int32_t error);
 
-int32_t     pp_parse_hdr(uint8_t *pkt, uint32_t pktlen, pp_info_t *proxy_info);
+/* Searches for the specified TLV and returns its value.
+ *
+ * pp_info  Pointer to a pp_info_t structure used in pp_parse().
+ * length   Pointer to a uint16_t where the TLV's value length will be set.
+ * return   Pointer to a buffer holding the TLV's value if found else NULL.
+ *          In case of US-ASCII value the buffer is NULL terminated
+ */
+const uint8_t *pp_info_get_alpn(const pp_info_t *pp_info, uint16_t *length);
+const uint8_t *pp_info_get_authority(const pp_info_t *pp_info, uint16_t *length);
+const uint8_t *pp_info_get_crc32c(const pp_info_t *pp_info, uint16_t *length);
+const uint8_t *pp_info_get_unique_id(const pp_info_t *pp_info, uint16_t *length);
+const uint8_t *pp_info_get_ssl_version(const pp_info_t *pp_info, uint16_t *length);
+const uint8_t *pp_info_get_ssl_cn(const pp_info_t *pp_info, uint16_t *length);
+const uint8_t *pp_info_get_ssl_cipher(const pp_info_t *pp_info, uint16_t *length);
+const uint8_t *pp_info_get_ssl_sig_alg(const pp_info_t *pp_info, uint16_t *length);
+const uint8_t *pp_info_get_ssl_key_alg(const pp_info_t *pp_info, uint16_t *length);
+const uint8_t *pp_info_get_ssl_netns(const pp_info_t *pp_info, uint16_t *length);
+const uint8_t *pp_info_get_aws_vpce_id(const pp_info_t *pp_info, uint16_t *length);
+const uint8_t *pp_info_get_azure_linkid(const pp_info_t *pp_info, uint16_t *length);
+void           pp_info_clear(pp_info_t *pp_info);
+
+/* Inpects the buffer for a PROXY protocol header and extracts all the information if any.
+ *
+ * version:     0 Create a v1 PROXY protocol header
+ *              1 Create a v2 PROXY protocol header
+ * pp_info      Pointer to a filled pp_info_t structure whose information will be used for the creation of the PROXY protocol header.
+ * pp_hdr_len   Pointer to a uint16_t where the length of the create PROXY protocol header will be set.
+ * error        Pointer to a uint32_t where the error value will be set.
+ *                  ERR_NULL No error occurred
+ *                  < 0      Error
+ */
+uint8_t    *pp_create_hdr(uint8_t version, const pp_info_t *pp_info, uint16_t *pp_hdr_len, uint32_t *error);
+
+/* Inpects the buffer for a PROXY protocol header and extracts all the information if any.
+ *
+ * buffer   Buffer to be inspected and parsed. Typically the buffer given for a read operation
+ * length   Buffer's length. Typically the bytes read from the read operation
+ * pp_info  Pointer to a pp_info_t structure which will get filled with all the extracted information.
+ * return   >  0 Length of the PROXY protocol header.
+ *          == 0 No PROXY protocol header found.
+ *          <  0 Error occurred. pp_strerror() with that value can be used to get a descriptive message
+ */
+int32_t pp_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t *pp_info);
 
 #endif
