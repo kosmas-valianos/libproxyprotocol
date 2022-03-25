@@ -100,7 +100,7 @@ typedef struct
 /* Returns a descriptive error message
  *
  * error    int32_t value from other API functions
- * return   Pointer to the descriptive message if error value is recognized else NULL
+ * return   Pointer to the descriptive message if the error value is recognized else NULL
  */
 const char *pp_strerror(int32_t error);
 
