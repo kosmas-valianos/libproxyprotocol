@@ -113,13 +113,13 @@ typedef union
 /* PP2_TYPE_AZURE subtypes */
 #define PP2_SUBTYPE_AZURE_PRIVATEENDPOINT_LINKID 0x01
 
-typedef struct
+struct _pp2_tlv_t
 {
     uint8_t type;
     uint8_t length_hi;
     uint8_t length_lo;
     uint8_t value[1];
-} pp2_tlv_t;
+};
 
 /* PP2_TYPE_SSL <client> bit field  */
 #define PP2_CLIENT_SSL       0x01
@@ -145,23 +145,13 @@ typedef struct
     uint32_t linkid;
 } pp2_tlv_azure_t;
 
+/* ANSI C makes us suffer as we cannot have value[0] */
+#define sizeof_pp2_tlv_t     (sizeof(pp2_tlv_t) - 1)
+#define sizeof_pp2_tlv_aws_t (sizeof(pp2_tlv_aws_t) - 1)
+
 /****************************************************************/
 
 #pragma pack()
-
-typedef struct
-{
-    uint8_t  type;
-    uint16_t length;
-    uint8_t  value[1];
-} tlv_t;
-
-struct _tlv_array_t
-{
-    uint32_t  len;  /* Number of elements  */
-    uint32_t  size; /* Allocated elements  */
-    tlv_t   **tlvs; /* Pointer to tlv_t* elements */
-};
 
 static const char *errors[] = {
     "No error",
@@ -215,26 +205,27 @@ static uint8_t parse_port(const char *value, uint16_t *usport)
     return 1;
 }
 
-static tlv_t *tlv_new(uint8_t type, uint16_t length, const void *value)
+static pp2_tlv_t *tlv_new(uint8_t type, uint16_t length, const void *value)
 {
-    tlv_t *tlv = malloc(sizeof(tlv_t) - 1 + length);
+    pp2_tlv_t *tlv = malloc(sizeof_pp2_tlv_t + length);
     if (!tlv)
     {
         return NULL;
     }
     tlv->type = type;
-    tlv->length = length;
+    tlv->length_hi = length >> 8;
+    tlv->length_lo = length & 0x00ff;
     memcpy(tlv->value, value, length);
     return tlv;
 }
 
-static uint8_t tlv_array_append_tlv(tlv_array_t *tlv_array, tlv_t *tlv)
+static uint8_t tlv_array_append_tlv(tlv_array_t *tlv_array, pp2_tlv_t *tlv)
 {
     if (!tlv_array->tlvs)
     {
         tlv_array->len = 0;
         tlv_array->size = 10;
-        tlv_array->tlvs = malloc(tlv_array->size * sizeof(tlv_t*));
+        tlv_array->tlvs = malloc(tlv_array->size * sizeof(pp2_tlv_t*));
         if (!tlv_array->tlvs)
         {
             return 0;
@@ -244,7 +235,7 @@ static uint8_t tlv_array_append_tlv(tlv_array_t *tlv_array, tlv_t *tlv)
     if (tlv_array->size == tlv_array->len)
     {
         tlv_array->size += 5;
-        tlv_t **tlvs = realloc(tlv_array->tlvs, tlv_array->size * sizeof(tlv_t*));
+        pp2_tlv_t **tlvs = realloc(tlv_array->tlvs, tlv_array->size * sizeof(pp2_tlv_t*));
         if (!tlvs)
         {
             return 0;
@@ -259,7 +250,7 @@ static uint8_t tlv_array_append_tlv(tlv_array_t *tlv_array, tlv_t *tlv)
 
 static uint8_t tlv_array_append_tlv_new(tlv_array_t *tlv_array, uint8_t type, uint16_t length, const void *value)
 {
-    tlv_t *tlv = tlv_new(type, length, value);
+    pp2_tlv_t *tlv = tlv_new(type, length, value);
     if (!tlv || !tlv_array_append_tlv(tlv_array, tlv))
     {
         return 0;
@@ -269,13 +260,104 @@ static uint8_t tlv_array_append_tlv_new(tlv_array_t *tlv_array, uint8_t type, ui
 
 static uint8_t tlv_array_append_tlv_new_usascii(tlv_array_t *tlv_array, uint8_t type, uint16_t length, const void *value)
 {
-    tlv_t *tlv = tlv_new(type, length + 1, value);
+    pp2_tlv_t *tlv = tlv_new(type, length + 1, value);
     if (!tlv || !tlv_array_append_tlv(tlv_array, tlv))
     {
         return 0;
     }
     tlv->value[length] = '\0';
     return 1;
+}
+
+uint8_t pp_info_add_alpn(pp_info_t *pp_info, uint16_t length, const void *alpn)
+{
+    return tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, PP2_TYPE_ALPN, length, alpn);
+}
+
+uint8_t pp_info_add_authority(pp_info_t *pp_info, uint16_t length, const void *host_name)
+{
+    return tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, PP2_TYPE_AUTHORITY, length, host_name);
+}
+
+uint8_t pp_info_add_unique_id(pp_info_t *pp_info, uint16_t length, const void *unique_id)
+{
+    if (length > 128)
+    {
+        return 0;
+    }
+    return tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, PP2_TYPE_UNIQUE_ID, length, unique_id);
+}
+
+static void pp_info_add_subtype_ssl(uint8_t *value, uint16_t *index, uint8_t subtype_ssl, uint16_t length, const uint8_t *subtype_ssl_value)
+{
+    if (!length || !subtype_ssl_value)
+    {
+        return;
+    }
+    value[(*index)++] = subtype_ssl;
+    value[(*index)++] = length >> 8;
+    value[(*index)++] = length & 0x00ff;
+    memcpy(value + *index, subtype_ssl_value, length);
+    *index += length;
+}
+
+uint8_t pp_info_add_ssl(pp_info_t *pp_info, const char *version, const char *cipher, const char *sig_alg, const char *key_alg, const char *cn, uint16_t cn_value_len)
+{
+    const pp2_ssl_info_t *pp2_ssl_info = &pp_info->pp2_info.pp2_ssl_info;
+    uint8_t client = pp2_ssl_info->ssl | pp2_ssl_info->cert_in_connection << 1 | pp2_ssl_info->cert_in_connection << 2;
+    uint32_t verify = !pp2_ssl_info->cert_verified;
+    size_t version_value_len = version ? strlen(version) : 0;
+    size_t cipher_value_len = cipher ? strlen(cipher) : 0;
+    size_t sig_alg_value_len = sig_alg ? strlen(sig_alg) : 0;
+    size_t key_alg_value_len = key_alg ? strlen(key_alg) : 0;
+    size_t length = sizeof(client) + sizeof(verify)
+        + sizeof_pp2_tlv_t + version_value_len
+        + sizeof_pp2_tlv_t + cipher_value_len
+        + sizeof_pp2_tlv_t + sig_alg_value_len
+        + sizeof_pp2_tlv_t + key_alg_value_len
+        + sizeof_pp2_tlv_t + cn_value_len;
+
+    if (length > UINT16_MAX)
+    {
+        return 0;
+    }
+
+    uint16_t index = 0;
+    uint8_t *value = malloc(length);
+    value[index++] = client;
+    memcpy(value + index, &verify, sizeof(verify));
+    index += sizeof(verify);
+    pp_info_add_subtype_ssl(value, &index, PP2_SUBTYPE_SSL_VERSION, (uint16_t)version_value_len, version);
+    pp_info_add_subtype_ssl(value, &index, PP2_SUBTYPE_SSL_CIPHER, (uint16_t)cipher_value_len, cipher);
+    pp_info_add_subtype_ssl(value, &index, PP2_SUBTYPE_SSL_SIG_ALG, (uint16_t)sig_alg_value_len, sig_alg);
+    pp_info_add_subtype_ssl(value, &index, PP2_SUBTYPE_SSL_KEY_ALG, (uint16_t)key_alg_value_len, key_alg);
+    pp_info_add_subtype_ssl(value, &index, PP2_SUBTYPE_SSL_CN, cn_value_len, cn);
+    uint8_t rc = tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, PP2_TYPE_SSL, (uint16_t)length, value);
+    free(value);
+    return rc;
+}
+
+uint8_t pp_info_add_netns(pp_info_t *pp_info, const char *netns)
+{
+    return tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, PP2_TYPE_NETNS, (uint16_t)strlen(netns), netns);
+}
+
+uint8_t pp_info_add_aws_vpce_id(pp_info_t *pp_info, const char *vpce_id)
+{
+    uint16_t length = (uint16_t)(sizeof_pp2_tlv_aws_t + strlen(vpce_id));
+    pp2_tlv_aws_t *pp2_tlv_aws = malloc(length);
+    pp2_tlv_aws->type = PP2_SUBTYPE_AWS_VPCE_ID;
+    memcpy(pp2_tlv_aws->value, vpce_id, strlen(vpce_id));
+    return tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, PP2_TYPE_AWS, length, pp2_tlv_aws);
+}
+
+uint8_t pp_info_add_azure_linkid(pp_info_t *pp_info, uint32_t linkid)
+{
+    uint16_t length = (uint16_t)sizeof(pp2_tlv_azure_t);
+    pp2_tlv_azure_t *pp2_tlv_azure = malloc(length);
+    pp2_tlv_azure->type = PP2_SUBTYPE_AZURE_PRIVATEENDPOINT_LINKID;
+    pp2_tlv_azure->linkid = linkid;
+    return tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, PP2_TYPE_AZURE, length, pp2_tlv_azure);
 }
 
 static void tlv_array_clear(tlv_array_t *tlv_array)
@@ -295,27 +377,27 @@ static void tlv_array_clear(tlv_array_t *tlv_array)
 static const uint8_t *pp_info_get_tlv_value(const pp_info_t *pp_info, uint8_t type, uint8_t subtype, uint16_t *length)
 {
     *length = 0;
-    if (!pp_info->tlv_array->tlvs || !pp_info->tlv_array->len)
+    if (!pp_info->pp2_info.tlv_array.tlvs || !pp_info->pp2_info.tlv_array.len)
     {
         return NULL;
     }
 
     uint32_t i;
-    for (i = 0; i < pp_info->tlv_array->len; i++)
+    for (i = 0; i < pp_info->pp2_info.tlv_array.len; i++)
     {
-        tlv_t *tlv = pp_info->tlv_array->tlvs[i];
+        pp2_tlv_t * tlv = pp_info->pp2_info.tlv_array.tlvs[i];
         if (tlv->type == type)
         {
+            *length = tlv->length_hi << 8 | tlv->length_lo;
             if (subtype > 0)
             {
                 if (tlv->value[0] == subtype)
                 {
-                    *length = tlv->length - 1;
+                    (*length)--;
                     return &tlv->value[1];
                 }
                 return NULL;
             }
-            *length = tlv->length;
             return tlv->value;
         }
     }
@@ -367,7 +449,7 @@ const uint8_t *pp_info_get_ssl_key_alg(const pp_info_t *pp_info, uint16_t *lengt
     return pp_info_get_tlv_value(pp_info, PP2_SUBTYPE_SSL_KEY_ALG, 0, length);
 }
 
-const uint8_t *pp_info_get_ssl_netns(const pp_info_t *pp_info, uint16_t *length)
+const uint8_t *pp_info_get_netns(const pp_info_t *pp_info, uint16_t *length)
 {
     return pp_info_get_tlv_value(pp_info, PP2_TYPE_NETNS, 0, length);
 }
@@ -384,11 +466,7 @@ const uint8_t *pp_info_get_azure_linkid(const pp_info_t *pp_info, uint16_t *leng
 
 void pp_info_clear(pp_info_t *pp_info)
 {
-    if (pp_info->tlv_array)
-    {
-        tlv_array_clear(pp_info->tlv_array);
-        free(pp_info->tlv_array);
-    }
+    tlv_array_clear(&pp_info->pp2_info.tlv_array);
     memset(pp_info, 0, sizeof(*pp_info));
 }
 
@@ -399,11 +477,11 @@ uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, int32_t
         .ver_cmd = '\x21',
     };
 
-    uint16_t len;
+    uint16_t proxy_addr_len;
     proxy_addr_t proxy_addr;
     if (pp_info->address_family == ADDR_FAMILY_UNSPEC)
     {
-        len = 0;
+        proxy_addr_len = 0;
         proxy_hdr_v2.ver_cmd = '\x20';
         if (!pp_info->pp2_info.local)
         {
@@ -413,7 +491,7 @@ uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, int32_t
     }
     else if (pp_info->address_family == ADDR_FAMILY_INET)
     {
-        len = 12;
+        proxy_addr_len = 12;
         if (inet_pton(AF_INET, pp_info->src_addr, &proxy_addr.ipv4_addr.src_addr) != 1)
         {
             *error = ERR_PP2_IPV4_SRC_IP;
@@ -429,7 +507,7 @@ uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, int32_t
     }
     else if (pp_info->address_family == ADDR_FAMILY_INET6)
     {
-        len = 36;
+        proxy_addr_len = 36;
         if (inet_pton(AF_INET6, pp_info->src_addr, &proxy_addr.ipv6_addr.src_addr) != 1)
         {
             *error = ERR_PP2_IPV6_SRC_IP;
@@ -445,7 +523,7 @@ uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, int32_t
     }
     else if (pp_info->address_family == ADDR_FAMILY_UNIX)
     {
-        len = 216;
+        proxy_addr_len = 216;
         memcpy(proxy_addr.unix_addr.src_addr, pp_info->src_addr, sizeof(pp_info->src_addr));
         memcpy(proxy_addr.unix_addr.dst_addr, pp_info->dst_addr, sizeof(pp_info->dst_addr));
     }
@@ -462,6 +540,15 @@ uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, int32_t
     }
 
     proxy_hdr_v2.fam = pp_info->address_family << 4 | pp_info->transport_protocol;
+
+    uint16_t len = proxy_addr_len;
+    const tlv_array_t *tlv_array = &pp_info->pp2_info.tlv_array;
+    uint16_t i;
+    for (i = 0; i < tlv_array->len; i++)
+    {
+        uint16_t tlv_len = sizeof_pp2_tlv_t + (tlv_array->tlvs[i]->length_hi << 8 | tlv_array->tlvs[i]->length_lo);
+        len += tlv_len;
+    }
     proxy_hdr_v2.len = htons(len);
 
     /* Create the PROXY protocol header */
@@ -472,8 +559,17 @@ uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, int32_t
         *error = ERR_HEAP_ALLOC;
         return NULL;
     }
+    uint16_t index = 0;
     memcpy(pp2_hdr, &proxy_hdr_v2, sizeof(proxy_hdr_v2_t));
-    memcpy(pp2_hdr + sizeof(proxy_hdr_v2_t), &proxy_addr, len);
+    index += sizeof(proxy_hdr_v2_t);
+    memcpy(pp2_hdr + index, &proxy_addr, proxy_addr_len);
+    index += proxy_addr_len;
+    for (i = 0; i < tlv_array->len; i++)
+    {
+        uint16_t tlv_len = sizeof_pp2_tlv_t + (tlv_array->tlvs[i]->length_hi << 8 | tlv_array->tlvs[i]->length_lo);
+        memcpy(pp2_hdr + index, tlv_array->tlvs[i], tlv_len);
+        index += tlv_len;
+    }
 
     *error = ERR_NULL;
     return pp2_hdr;
@@ -650,12 +746,6 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
     const uint8_t *ppv2_hdr = buffer;
     const proxy_hdr_v2_t *proxy_hdr_v2 = (proxy_hdr_v2_t *) buffer;
 
-    /* Constant 12 bytes block containing the protocol signature */
-    if (memcmp(proxy_hdr_v2->sig, "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A", sizeof(proxy_hdr_v2->sig)))
-    {
-        return ERR_PP2_SIG;
-    }
-
     /* The next byte (the 13th one) is the protocol version and command */
     /* The highest four bits contains the version. Only \x2 is accepted */
     uint8_t version = proxy_hdr_v2->ver_cmd >> 4;
@@ -781,10 +871,6 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
 
     /* TLVs */
     /* Any TLV vector must be at least 3 bytes */
-    if (tlv_vectors_len > 3)
-    {
-        pp_info->tlv_array = calloc(1, sizeof(*pp_info->tlv_array));
-    }
     while (tlv_vectors_len > 3)
     {
         pp2_tlv_t *pp2_tlv = (pp2_tlv_t *) buffer;
@@ -799,7 +885,7 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
         {
         case PP2_TYPE_ALPN:      /* Byte sequence */
         case PP2_TYPE_AUTHORITY: /* UTF8 */
-            if (!tlv_array_append_tlv_new(pp_info->tlv_array, pp2_tlv->type, pp2_tlv_len, pp2_tlv->value))
+            if (!tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, pp2_tlv->type, pp2_tlv_len, pp2_tlv->value))
             {
                 return ERR_HEAP_ALLOC;
             }
@@ -825,7 +911,7 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
                 return ERR_PP2_TYPE_CRC32C;
             }
 
-            if (!tlv_array_append_tlv_new(pp_info->tlv_array, pp2_tlv->type, pp2_tlv_len, &crc32c_chksum))
+            if (!tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, pp2_tlv->type, pp2_tlv_len, &crc32c_chksum))
             {
                 return ERR_HEAP_ALLOC;
             }
@@ -838,7 +924,7 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
             {
                 return ERR_PP2_TYPE_UNIQUE_ID;
             }
-            if (!tlv_array_append_tlv_new(pp_info->tlv_array, pp2_tlv->type, pp2_tlv_len, pp2_tlv->value))
+            if (!tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, pp2_tlv->type, pp2_tlv_len, pp2_tlv->value))
             {
                 return ERR_HEAP_ALLOC;
             }
@@ -867,13 +953,13 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
                 case PP2_SUBTYPE_SSL_CIPHER:  /* US-ASCII */
                 case PP2_SUBTYPE_SSL_SIG_ALG: /* US-ASCII */
                 case PP2_SUBTYPE_SSL_KEY_ALG: /* US-ASCII */
-                    if (!tlv_array_append_tlv_new_usascii(pp_info->tlv_array, pp2_sub_tlv_ssl->type, pp2_sub_tlv_ssl_len, pp2_sub_tlv_ssl->value))
+                    if (!tlv_array_append_tlv_new_usascii(&pp_info->pp2_info.tlv_array, pp2_sub_tlv_ssl->type, pp2_sub_tlv_ssl_len, pp2_sub_tlv_ssl->value))
                     {
                         return ERR_HEAP_ALLOC;
                     }
                     break;
                 case PP2_SUBTYPE_SSL_CN: /* UTF8 */
-                    if (!tlv_array_append_tlv_new(pp_info->tlv_array, pp2_sub_tlv_ssl->type, pp2_sub_tlv_ssl_len, pp2_sub_tlv_ssl->value))
+                    if (!tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, pp2_sub_tlv_ssl->type, pp2_sub_tlv_ssl_len, pp2_sub_tlv_ssl->value))
                     {
                         return ERR_HEAP_ALLOC;
                     }
@@ -891,7 +977,7 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
             break;
         }
         case PP2_TYPE_NETNS: /* US-ASCII */
-            if (!tlv_array_append_tlv_new_usascii(pp_info->tlv_array, pp2_tlv->type, pp2_tlv_len, pp2_tlv->value))
+            if (!tlv_array_append_tlv_new_usascii(&pp_info->pp2_info.tlv_array, pp2_tlv->type, pp2_tlv_len, pp2_tlv->value))
             {
                 return ERR_HEAP_ALLOC;
             }
@@ -907,7 +993,7 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
             if (pp2_tlv_aws->type == PP2_SUBTYPE_AWS_VPCE_ID) /* US-ASCII */
             {
                 /* Example: \x1vpce-08d2bf15fac5001c9 */
-                if (!tlv_array_append_tlv_new_usascii(pp_info->tlv_array, pp2_tlv->type, pp2_tlv_len, pp2_tlv->value))
+                if (!tlv_array_append_tlv_new_usascii(&pp_info->pp2_info.tlv_array, pp2_tlv->type, pp2_tlv_len, pp2_tlv->value))
                 {
                     return ERR_HEAP_ALLOC;
                 }
@@ -924,8 +1010,8 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
             /* Connection is done through Private Link service */
             if (pp2_tlv_azure->type == PP2_TYPE_AZURE) /* 32-bit number */
             {
-                tlv_t *tlv = tlv_new(pp2_tlv->type, pp2_tlv_len, pp2_tlv->value);
-                if (!tlv || !tlv_array_append_tlv(pp_info->tlv_array, tlv))
+                pp2_tlv_t *tlv = tlv_new(pp2_tlv->type, pp2_tlv_len, pp2_tlv->value);
+                if (!tlv || !tlv_array_append_tlv(&pp_info->pp2_info.tlv_array, tlv))
                 {
                     return ERR_HEAP_ALLOC;
                 }

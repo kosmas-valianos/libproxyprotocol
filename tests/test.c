@@ -71,6 +71,7 @@ typedef struct
     uint32_t    raw_bytes_in_length;
     int32_t     rc_expected;
     pp_info_t   pp_info_out_expected;
+    test_tlv_t  add_tlvs[10];
     test_tlv_t  expected_tlvs[10];
 } test_t;
 
@@ -129,13 +130,85 @@ uint8_t pp2_hdr_ssl[] = {
             0x00, 0x00, 0x00, 0x00  /* PP2_TYPE_NOOP end */
 };
 
+static uint8_t pp_add_tlvs(pp_info_t *pp_info, const test_tlv_t (*add_tlvs)[10])
+{
+    uint8_t i;
+    uint8_t rc = 1;
+    uint16_t ssl_cn_len = 0;
+    char *ssl_version = NULL;
+    char *ssl_cn = NULL;
+    char *ssl_cipher = NULL;
+    char *ssl_sig_alg = NULL;
+    char *ssl_key_alg = NULL;
+    for (i = 0; i < NUM_ELEMS(*add_tlvs) && rc == 1; i++)
+    {
+        const test_tlv_t *test_tlv = &(*add_tlvs)[i];
+        if (test_tlv->type)
+        {
+            switch (test_tlv->type)
+            {
+            case PP2_TYPE_ALPN:
+                rc = pp_info_add_alpn(pp_info, test_tlv->value_len, test_tlv->value);
+                break;
+            case PP2_TYPE_AUTHORITY:
+                rc = pp_info_add_authority(pp_info, test_tlv->value_len, test_tlv->value);
+                break;
+            case PP2_TYPE_NOOP:
+                break;
+            case PP2_TYPE_UNIQUE_ID:
+                rc = pp_info_add_unique_id(pp_info, test_tlv->value_len, test_tlv->value);
+                break;
+            case PP2_SUBTYPE_SSL_VERSION:
+                ssl_version = test_tlv->value;
+                break;
+            case PP2_SUBTYPE_SSL_CN:
+                ssl_cn_len = test_tlv->value_len;
+                ssl_cn = test_tlv->value;
+                break;
+            case PP2_SUBTYPE_SSL_CIPHER:
+                ssl_cipher = test_tlv->value;
+                break;
+            case PP2_SUBTYPE_SSL_SIG_ALG:
+                ssl_sig_alg = test_tlv->value;
+                break;
+            case PP2_SUBTYPE_SSL_KEY_ALG:
+                ssl_key_alg = test_tlv->value;
+                break;
+            case PP2_TYPE_NETNS:
+                rc = pp_info_add_netns(pp_info, test_tlv->value);
+                break;
+            case PP2_TYPE_AWS:
+                rc = pp_info_add_aws_vpce_id(pp_info, test_tlv->value);
+                break;
+            case PP2_TYPE_AZURE:
+                rc = pp_info_add_azure_linkid(pp_info, (uint32_t) test_tlv->value);
+                break;
+            default:
+                break;
+            }
+        }
+    }
+
+    if (!rc)
+    {
+        return rc;
+    }
+
+    if (pp_info->pp2_info.pp2_ssl_info.ssl)
+    {
+        rc = pp_info_add_ssl(pp_info, ssl_version, ssl_cipher, ssl_sig_alg, ssl_key_alg, ssl_cn, ssl_cn_len);
+    }
+
+    return rc;
+}
+
 static uint8_t pp_verify_tlvs(const pp_info_t *pp_info, const test_tlv_t (*expected_tlvs)[10])
 {
     uint8_t i;
-    for (i = 0; i < 10; i++)
+    for (i = 0; i < NUM_ELEMS(*expected_tlvs); i++)
     {
         const test_tlv_t *test_tlv = &(*expected_tlvs)[i];
-        if (test_tlv->type != 0)
+        if (test_tlv->type)
         {
             uint16_t tlv_value_len = 0;
             const uint8_t *tlv_value = NULL;
@@ -171,7 +244,7 @@ static uint8_t pp_verify_tlvs(const pp_info_t *pp_info, const test_tlv_t (*expec
                 tlv_value = pp_info_get_ssl_key_alg(pp_info, &tlv_value_len);
                 break;
             case PP2_TYPE_NETNS:
-                tlv_value = pp_info_get_ssl_netns(pp_info, &tlv_value_len);
+                tlv_value = pp_info_get_netns(pp_info, &tlv_value_len);
                 break;
             case PP2_TYPE_AWS:
                 tlv_value = pp_info_get_aws_vpce_id(pp_info, &tlv_value_len);
@@ -217,7 +290,11 @@ static uint8_t pp_info_equal(const pp_info_t *pp_info_a, const pp_info_t *pp_inf
     {
         return 0;
     }
-    if (memcmp(&pp_info_a->pp2_info, &pp_info_b->pp2_info, sizeof(pp2_info_t)))
+    if (pp_info_a->pp2_info.local != pp_info_b->pp2_info.local)
+    {
+        return 0;
+    }
+    if (memcmp(&pp_info_a->pp2_info.pp2_ssl_info, &pp_info_b->pp2_info.pp2_ssl_info, sizeof(pp2_ssl_info_t)))
     {
         return 0;
     }
@@ -341,6 +418,61 @@ int main()
             .pp_info_out_expected = tests[8].pp_info_in,
         },
         {
+            .name = "v2 PROXY protocol header: create and parse: PROXY, TCP over IPv4.",
+            .version = 2,
+            .pp_info_in = {
+                .address_family = ADDR_FAMILY_INET,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
+                .src_addr = "192.168.10.100",
+                .dst_addr = "192.168.11.90",
+                .src_port = 42332,
+                .dst_port = 8080,
+                .pp2_info = {
+                    .pp2_ssl_info = {
+                        .ssl = 1,
+                        .cert_in_connection = 1,
+                        .cert_in_session = 1,
+                        .cert_verified = 1,
+                    }
+                }
+            },
+            .add_tlvs = {
+                {
+                    .type = PP2_SUBTYPE_SSL_VERSION,
+                    .value_len = 8,
+                    .value = (uint8_t*)"TLSv1.2"
+                },
+                {
+                    .type = PP2_SUBTYPE_SSL_CN,
+                    .value_len = 11,
+                    /* example.com */
+                    .value = (uint8_t*)"\x65\x78\x61\x6d\x70\x6c\x65\x2e\x63\x6f\x6d"
+                },
+                {
+                    .type = PP2_SUBTYPE_SSL_CIPHER,
+                    .value_len = 28,
+                    .value = (uint8_t*)"ECDHE-RSA-AES128-GCM-SHA256"
+                },
+                {
+                    .type = PP2_SUBTYPE_SSL_SIG_ALG,
+                    .value_len = 7,
+                    .value = (uint8_t*)"SHA256"
+                },
+                {
+                    .type = PP2_SUBTYPE_SSL_KEY_ALG,
+                    .value_len = 8,
+                    .value = (uint8_t*)"RSA2048"
+                },
+                {
+                    .type = PP2_TYPE_AWS,
+                    .subtype = PP2_SUBTYPE_AWS_VPCE_ID,
+                    .value_len = 23,
+                    .value = (uint8_t*)"vpce-23d8ezjk38bchilm4"
+                },
+            },
+            .pp_info_out_expected = tests[9].pp_info_in,
+        },
+        {
             .name = "v2 PROXY protocol header: PROXY, TCP over IPv4. TLVs: "
                     "PP2_TYPE_SSL, PP2_SUBTYPE_SSL_VERSION, PP2_SUBTYPE_SSL_CN, PP2_SUBTYPE_SSL_CIPHER, PP2_SUBTYPE_SSL_SIG_ALG, PP2_SUBTYPE_SSL_KEY_ALG ",
             .raw_bytes_in = pp2_hdr_ssl,
@@ -353,7 +485,8 @@ int main()
                 .dst_addr = "192.168.11.90",
                 .src_port = 42332,
                 .dst_port = 8080,
-                .pp2_info = { .local = 0, .pp2_ssl_info = {
+                .pp2_info = {
+                    .pp2_ssl_info = {
                         .ssl = 1,
                         .cert_in_connection = 1,
                         .cert_in_session = 1,
@@ -407,6 +540,18 @@ int main()
         {
             uint16_t pp_hdr_len;
             int32_t error;
+
+            if (tests[i].add_tlvs[0].type)
+            {
+                memcpy(tests[i].expected_tlvs, tests[i].add_tlvs, sizeof(tests[i].expected_tlvs));
+                if (!pp_add_tlvs(&tests[i].pp_info_in, &tests[i].add_tlvs))
+                {
+                    printf("FAILED\n");
+                    pp_info_clear(&pp_info_out);
+                    return EXIT_FAILURE;
+                }
+            }
+
             uint8_t *pp_hdr = pp_create_hdr(tests[i].version, &tests[i].pp_info_in, &pp_hdr_len, &error);
             if (!pp_hdr || error != ERR_NULL)
             {

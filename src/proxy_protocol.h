@@ -54,20 +54,35 @@ enum
     ERR_HEAP_ALLOC             = -28,
 };
 
-typedef struct _tlv_array_t tlv_array_t;
+/* Returns a descriptive error message
+ *
+ * error    int32_t value from other API functions
+ * return   Pointer to the descriptive message if the error value is recognized else NULL
+ */
+const char *pp_strerror(int32_t error);
 
 typedef struct
 {
     uint8_t ssl;                /* 1: client connected over SSL/TLS 0: otherwise */
     uint8_t cert_in_connection; /* 1: client provided a certificate over the current connection 0: otherwise */
     uint8_t cert_in_session;    /* 1: client provided a certificate at least once over the TLS session this connection belongs to 0: otherwise */
-    uint8_t cert_verified;      /* 1: client presented a certificate and it was successfully verified 1: otherwise */
+    uint8_t cert_verified;      /* 1: client presented a certificate and it was successfully verified 0: otherwise */
 } pp2_ssl_info_t;
+
+typedef struct _pp2_tlv_t pp2_tlv_t;
+
+typedef struct
+{
+    uint32_t    len;  /* Number of elements  */
+    uint32_t    size; /* Allocated elements  */
+    pp2_tlv_t **tlvs; /* Pointer to pp2_tlv_t* elements */
+} tlv_array_t;
 
 typedef struct
 {
     uint8_t        local; /* 1: LOCAL 0: PROXY */
     pp2_ssl_info_t pp2_ssl_info;
+    tlv_array_t    tlv_array;
 } pp2_info_t;
 
 enum
@@ -94,15 +109,15 @@ typedef struct
     uint16_t     src_port;
     uint16_t     dst_port;
     pp2_info_t   pp2_info;
-    tlv_array_t *tlv_array;
 } pp_info_t;
 
-/* Returns a descriptive error message
- *
- * error    int32_t value from other API functions
- * return   Pointer to the descriptive message if the error value is recognized else NULL
- */
-const char *pp_strerror(int32_t error);
+uint8_t pp_info_add_alpn(pp_info_t *pp_info, uint16_t length, const void *alpn);
+uint8_t pp_info_add_authority(pp_info_t *pp_info, uint16_t length, const void *host_name);
+uint8_t pp_info_add_unique_id(pp_info_t *pp_info, uint16_t length, const void *unique_id);
+uint8_t pp_info_add_ssl(pp_info_t *pp_info, const char *version, const char *cipher, const char *sig_alg, const char *key_alg, const char *cn, uint16_t cn_len);
+uint8_t pp_info_add_netns(pp_info_t *pp_info, const char *netns);
+uint8_t pp_info_add_aws_vpce_id(pp_info_t *pp_info, const char *vpce_id);
+uint8_t pp_info_add_azure_linkid(pp_info_t *pp_info, uint32_t linkid);
 
 /* Searches for the specified TLV and returns its value
  *
@@ -120,7 +135,7 @@ const uint8_t *pp_info_get_ssl_cn(const pp_info_t *pp_info, uint16_t *length);
 const uint8_t *pp_info_get_ssl_cipher(const pp_info_t *pp_info, uint16_t *length);
 const uint8_t *pp_info_get_ssl_sig_alg(const pp_info_t *pp_info, uint16_t *length);
 const uint8_t *pp_info_get_ssl_key_alg(const pp_info_t *pp_info, uint16_t *length);
-const uint8_t *pp_info_get_ssl_netns(const pp_info_t *pp_info, uint16_t *length);
+const uint8_t *pp_info_get_netns(const pp_info_t *pp_info, uint16_t *length);
 const uint8_t *pp_info_get_aws_vpce_id(const pp_info_t *pp_info, uint16_t *length);
 const uint8_t *pp_info_get_azure_linkid(const pp_info_t *pp_info, uint16_t *length);
 
