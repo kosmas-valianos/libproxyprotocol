@@ -83,6 +83,15 @@ typedef struct
     uint8_t        local; /* 1: LOCAL 0: PROXY */
     pp2_ssl_info_t pp2_ssl_info;
     tlv_array_t    tlv_array;
+    /*
+     * In creation:
+     *      1: calculate and add crc32c checksum TLV
+     *      0: no crc32c checksum
+     * In parsing:
+     *      1: crc32c checksum TLV is present. Optionally, pp_info_get_crc32c() can be used to get the value
+     *      0: crc32c checksum is not present
+     */
+    uint8_t crc32c;
 } pp2_info_t;
 
 enum

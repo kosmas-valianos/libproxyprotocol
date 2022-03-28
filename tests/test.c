@@ -153,8 +153,6 @@ static uint8_t pp_add_tlvs(pp_info_t *pp_info, const test_tlv_t (*add_tlvs)[10])
             case PP2_TYPE_AUTHORITY:
                 rc = pp_info_add_authority(pp_info, test_tlv->value_len, test_tlv->value);
                 break;
-            case PP2_TYPE_NOOP:
-                break;
             case PP2_TYPE_UNIQUE_ID:
                 rc = pp_info_add_unique_id(pp_info, test_tlv->value_len, test_tlv->value);
                 break;
@@ -298,6 +296,10 @@ static uint8_t pp_info_equal(const pp_info_t *pp_info_a, const pp_info_t *pp_inf
     {
         return 0;
     }
+    if (pp_info_a->pp2_info.crc32c != pp_info_b->pp2_info.crc32c)
+    {
+        return 0;
+    }
     return 1;
 }
 
@@ -328,19 +330,20 @@ int main()
                 .src_addr = "192.168.10.100",
                 .dst_addr = "192.168.11.90",
                 .src_port = 42332,
-                .dst_port = 8080
+                .dst_port = 8080,
+                .pp2_info = { .crc32c = 1 }
             },
             .expected_tlvs = {
                 {
                     .type = PP2_TYPE_CRC32C,
                     .value_len = 4,
-                    .value = (uint8_t *) "\xe5\x18\x86\xf8"
+                    .value = (uint8_t*)"\xe5\x18\x86\xf8"
                 },
                 {
                     .type = PP2_TYPE_AWS,
                     .subtype = PP2_SUBTYPE_AWS_VPCE_ID,
                     .value_len = 23,
-                    .value = (uint8_t *) "vpce-23d8ezjk38bchilm4"
+                    .value = (uint8_t*)"vpce-23d8ezjk38bchilm4"
                 },
             },
         },
@@ -419,7 +422,8 @@ int main()
         },
         {
             .name = "v2 PROXY protocol header: create and parse - PROXY, TCP over IPv4. TLVs: "
-                    "PP2_TYPE_SSL, PP2_SUBTYPE_SSL_VERSION, PP2_SUBTYPE_SSL_CN, PP2_SUBTYPE_SSL_CIPHER, PP2_SUBTYPE_SSL_SIG_ALG, PP2_SUBTYPE_SSL_KEY_ALG, PP2_TYPE_AWS(PP2_SUBTYPE_AWS_VPCE_ID)",
+                    "PP2_TYPE_SSL, PP2_SUBTYPE_SSL_VERSION, PP2_SUBTYPE_SSL_CN, PP2_SUBTYPE_SSL_CIPHER,"
+                    "PP2_SUBTYPE_SSL_SIG_ALG, PP2_SUBTYPE_SSL_KEY_ALG, PP2_TYPE_AWS(PP2_SUBTYPE_AWS_VPCE_ID), PP2_TYPE_CRC32C",
             .version = 2,
             .pp_info_in = {
                 .address_family = ADDR_FAMILY_INET,
@@ -429,6 +433,7 @@ int main()
                 .src_port = 42332,
                 .dst_port = 8080,
                 .pp2_info = {
+                    .crc32c = 1,
                     .pp2_ssl_info = {
                         .ssl = 1,
                         .cert_in_connection = 1,
@@ -468,7 +473,12 @@ int main()
                     .type = PP2_TYPE_AWS,
                     .subtype = PP2_SUBTYPE_AWS_VPCE_ID,
                     .value_len = 23,
-                    .value = (uint8_t*)"vpce-23d8ezjk38bchilm4"
+                    .value = (uint8_t*)"vpce-24d8ezjk38bchilm4"
+                },
+                {
+                    .type = PP2_TYPE_CRC32C,
+                    .value_len = 4,
+                    .value = (uint8_t*)"\x72\x45\x29\xd8"
                 },
             },
             .pp_info_out_expected = tests[9].pp_info_in,
