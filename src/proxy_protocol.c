@@ -542,7 +542,7 @@ uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, int32_t
 
     uint16_t len = proxy_addr_len;
     const tlv_array_t *tlv_array = &pp_info->pp2_info.tlv_array;
-    uint16_t i;
+    uint32_t i;
     for (i = 0; i < tlv_array->len; i++)
     {
         uint16_t tlv_len = sizeof_pp2_tlv_t + (tlv_array->tlvs[i]->length_hi << 8 | tlv_array->tlvs[i]->length_lo);
