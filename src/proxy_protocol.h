@@ -111,6 +111,14 @@ typedef struct
     pp2_info_t   pp2_info;
 } pp_info_t;
 
+
+/* Adds the specified TLV in the given pp_info
+ *
+ * pp_info          Pointer to a pp_info_t structure to be used in pp_create_hdr()
+ * length           The length of the TLV's value in case it is not a US-ASCII value
+ * $value_param(s)  The value(s) of the specified TLV
+ * return           1: success 0: failure
+ */
 uint8_t pp_info_add_alpn(pp_info_t *pp_info, uint16_t length, const void *alpn);
 uint8_t pp_info_add_authority(pp_info_t *pp_info, uint16_t length, const void *host_name);
 uint8_t pp_info_add_unique_id(pp_info_t *pp_info, uint16_t length, const void *unique_id);
@@ -153,7 +161,7 @@ void pp_info_clear(pp_info_t *pp_info);
  * pp_hdr_len   Pointer to a uint16_t where the length of the create PROXY protocol header will be set
  * error        Pointer to a uint32_t where the error value will be set
  *                  ERR_NULL No error occurred
- *                  < 0      Error
+ *                  < 0      Error occurred. pp_strerror() with that value can be used to get a descriptive message
  * return       Pointer to a heap allocated buffer containing the PROXY protocol header. Must be freed with free()
  */
 uint8_t *pp_create_hdr(uint8_t version, const pp_info_t *pp_info, uint16_t *pp_hdr_len, int32_t *error);

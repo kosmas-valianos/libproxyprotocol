@@ -53,7 +53,8 @@ for string processing.
  */
 
 #define PP1_MAX_LENGHT 108
-static const char *crlf = "\r\n";
+#define PP1_SIG        "PROXY"
+#define CRLF           "\r\n"
 
 /****************************************************************/
 
@@ -144,6 +145,8 @@ typedef struct
     uint8_t  type;
     uint32_t linkid;
 } pp2_tlv_azure_t;
+
+#define PP2_SIG "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A"
 
 /* ANSI C makes us suffer as we cannot have value[0] */
 #define sizeof_pp2_tlv_t     (sizeof(pp2_tlv_t) - 1)
@@ -472,11 +475,7 @@ void pp_info_clear(pp_info_t *pp_info)
 
 uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, int32_t *error)
 {
-    proxy_hdr_v2_t proxy_hdr_v2 = {
-        .sig = "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A",
-        .ver_cmd = '\x21',
-    };
-
+    proxy_hdr_v2_t proxy_hdr_v2 = { .sig = PP2_SIG, .ver_cmd = '\x21' };
     uint16_t proxy_addr_len;
     proxy_addr_t proxy_addr;
     if (pp_info->address_family == ADDR_FAMILY_UNSPEC)
@@ -577,17 +576,18 @@ uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, int32_t
 
 static uint8_t *pp1_create_hdr(const pp_info_t *pp_info, uint16_t *pp1_hdr_len, int32_t *error)
 {
-    if (pp_info->transport_protocol != TRANSPORT_PROTOCOL_STREAM)
+    if (pp_info->transport_protocol != TRANSPORT_PROTOCOL_UNSPEC && pp_info->transport_protocol != TRANSPORT_PROTOCOL_STREAM)
     {
         *error = ERR_PP1_TRANSPORT_FAMILY;
         return NULL;
     }
 
-    /* sprintf() as snprintf does not exist in ANSI C */
     char block[PP1_MAX_LENGHT];
     if (pp_info->address_family == ADDR_FAMILY_UNSPEC)
     {
-        *pp1_hdr_len = sprintf(block, "PROXY UNKNOWN%s", crlf);
+        static const char str[] = "PROXY UNKNOWN"CRLF;
+        *pp1_hdr_len = sizeof(str) - 1;
+        memcpy(block, str, *pp1_hdr_len);
     }
     else if (pp_info->address_family == ADDR_FAMILY_INET || pp_info->address_family == ADDR_FAMILY_INET6)
     {
@@ -606,7 +606,8 @@ static uint8_t *pp1_create_hdr(const pp_info_t *pp_info, uint16_t *pp1_hdr_len, 
         char dst_addr[39+1];
         memcpy(src_addr, pp_info->src_addr, sizeof(src_addr));
         memcpy(dst_addr, pp_info->dst_addr, sizeof(dst_addr));
-        *pp1_hdr_len = sprintf(block, "PROXY %s %s %s %hu %hu%s", fam, src_addr, dst_addr, pp_info->src_port, pp_info->dst_port, crlf);
+        /* sprintf() as snprintf does not exist in ANSI C */
+        *pp1_hdr_len = sprintf(block, "PROXY %s %s %s %hu %hu"CRLF, fam, src_addr, dst_addr, pp_info->src_port, pp_info->dst_port);
     }
     else
     {
@@ -1035,12 +1036,12 @@ static int32_t pp1_parse_hdr(const uint8_t *buffer, uint32_t buffer_length, pp_i
     int32_t pp1_hdr_len = 0;
     memcpy(block, buffer, buffer_length < PP1_MAX_LENGHT ? buffer_length : PP1_MAX_LENGHT);
 
-    char *block_end = strstr(block, crlf);
+    char *block_end = strstr(block, CRLF);
     if (!block_end)
     {
         return ERR_PP1_CRLF;
     }
-    block_end += strlen(crlf);
+    block_end += strlen(CRLF);
     pp1_hdr_len = block_end - block;
 
     /* PROXY */
@@ -1197,11 +1198,11 @@ static int32_t pp1_parse_hdr(const uint8_t *buffer, uint32_t buffer_length, pp_i
 int32_t pp_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t *pp_info)
 {
     memset(pp_info, 0, sizeof(*pp_info));
-    if (buffer_length >= 16 && !memcmp(buffer, "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A", 12))
+    if (buffer_length >= 16 && !memcmp(buffer, PP2_SIG, 12))
     {
         return pp2_parse_hdr(buffer, buffer_length, pp_info);
     }
-    else if (buffer_length >= 8 && !memcmp(buffer, "\x50\x52\x4F\x58\x59", 5))
+    else if (buffer_length >= 8 && !memcmp(buffer, PP1_SIG, 5))
     {
         return pp1_parse_hdr(buffer, buffer_length, pp_info);;
     }

@@ -345,7 +345,7 @@ int main()
             },
         },
         {
-            .name = "v2 PROXY protocol header: PROXY, TCP over IPv4 create and parse",
+            .name = "v2 PROXY protocol header: create and parse - PROXY, TCP over IPv4",
             .version = 2,
             .pp_info_in = {
                 .address_family = ADDR_FAMILY_INET,
@@ -358,7 +358,7 @@ int main()
             .pp_info_out_expected = tests[3].pp_info_in,
         },
         {
-            .name = "v1 PROXY protocol header: TCP4 create and parse",
+            .name = "v1 PROXY protocol header: create and parse- TCP4",
             .version = 1,
             .pp_info_in = {
                 .address_family = ADDR_FAMILY_INET,
@@ -371,7 +371,7 @@ int main()
             .pp_info_out_expected = tests[4].pp_info_in,
         },
         {
-            .name = "v2 PROXY protocol header: PROXY, UNIX stream create and parse",
+            .name = "v2 PROXY protocol header: create and parse - PROXY, UNIX stream",
             .version = 2,
             .pp_info_in = {
                 .address_family = ADDR_FAMILY_UNIX,
@@ -382,7 +382,7 @@ int main()
             .pp_info_out_expected = tests[5].pp_info_in,
         },
         {
-            .name = "v2 PROXY protocol header: LOCAL, AF_UNSPEC create and parse",
+            .name = "v2 PROXY protocol header: create and parse - LOCAL, AF_UNSPEC",
             .version = 2,
             .pp_info_in = {
                 .address_family = ADDR_FAMILY_UNSPEC,
@@ -392,7 +392,7 @@ int main()
             .pp_info_out_expected = tests[6].pp_info_in,
         },
         {
-            .name = "v2 PROXY protocol header: PROXY, TCP over IPv6 create and parse",
+            .name = "v2 PROXY protocol header: create and parse - PROXY, TCP over IPv6",
             .version = 2,
             .pp_info_in = {
                 .address_family = ADDR_FAMILY_INET6,
@@ -405,7 +405,7 @@ int main()
             .pp_info_out_expected = tests[7].pp_info_in,
         },
         {
-            .name = "v1 PROXY protocol header: TCP6 create and parse",
+            .name = "v1 PROXY protocol header: create and parse - TCP6",
             .version = 1,
             .pp_info_in = {
                 .address_family = ADDR_FAMILY_INET6,
@@ -418,7 +418,8 @@ int main()
             .pp_info_out_expected = tests[8].pp_info_in,
         },
         {
-            .name = "v2 PROXY protocol header: create and parse: PROXY, TCP over IPv4.",
+            .name = "v2 PROXY protocol header: create and parse - PROXY, TCP over IPv4. TLVs: "
+                    "PP2_TYPE_SSL, PP2_SUBTYPE_SSL_VERSION, PP2_SUBTYPE_SSL_CN, PP2_SUBTYPE_SSL_CIPHER, PP2_SUBTYPE_SSL_SIG_ALG, PP2_SUBTYPE_SSL_KEY_ALG, PP2_TYPE_AWS(PP2_SUBTYPE_AWS_VPCE_ID)",
             .version = 2,
             .pp_info_in = {
                 .address_family = ADDR_FAMILY_INET,
@@ -474,7 +475,7 @@ int main()
         },
         {
             .name = "v2 PROXY protocol header: PROXY, TCP over IPv4. TLVs: "
-                    "PP2_TYPE_SSL, PP2_SUBTYPE_SSL_VERSION, PP2_SUBTYPE_SSL_CN, PP2_SUBTYPE_SSL_CIPHER, PP2_SUBTYPE_SSL_SIG_ALG, PP2_SUBTYPE_SSL_KEY_ALG ",
+                    "PP2_TYPE_SSL, PP2_SUBTYPE_SSL_VERSION, PP2_SUBTYPE_SSL_CN, PP2_SUBTYPE_SSL_CIPHER, PP2_SUBTYPE_SSL_SIG_ALG, PP2_SUBTYPE_SSL_KEY_ALG",
             .raw_bytes_in = pp2_hdr_ssl,
             .raw_bytes_in_length = sizeof(pp2_hdr_ssl),
             .rc_expected = sizeof(pp2_hdr_ssl),
@@ -522,6 +523,15 @@ int main()
                     .value = (uint8_t*)"RSA2048"
                 },
             },
+        },
+        {
+            .name = "v1 PROXY protocol header: create and parse - AF_UNSPEC",
+            .version = 1,
+            .pp_info_in = {
+                .address_family = ADDR_FAMILY_UNSPEC,
+                .transport_protocol = TRANSPORT_PROTOCOL_UNSPEC,
+            },
+            .pp_info_out_expected = tests[11].pp_info_in,
         },
     };
 
