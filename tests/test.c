@@ -587,7 +587,7 @@ int main()
     /* Test pp_strerror() */
     printf("Running test: pp_strerror()...");
     if (strcmp("No error", pp_strerror(ERR_NULL))
-     || strcmp("v1 PROXY protocol header: invalid dst port", pp_strerror(ERR_PP1_DST_PORT))
+     || strcmp("v1 PROXY protocol header: invalid dst port", pp_strerror(-ERR_PP1_DST_PORT))
      || pp_strerror(-29) || pp_strerror(1))
     {
         printf("FAILED\n");
