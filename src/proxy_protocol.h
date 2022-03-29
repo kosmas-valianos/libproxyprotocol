@@ -24,50 +24,74 @@
 enum
 {
     ERR_NULL,
-    ERR_PP_VERSION             = -1,
-    ERR_PP2_SIG                = -2,
-    ERR_PP2_VERSION            = -3,
-    ERR_PP2_CMD                = -4,
-    ERR_PP2_ADDR_FAMILY        = -5,
-    ERR_PP2_TRANSPORT_PROTOCOL = -6,
-    ERR_PP2_LENGTH             = -7,
-    ERR_PP2_IPV4_SRC_IP        = -8,
-    ERR_PP2_IPV4_DST_IP        = -9,
-    ERR_PP2_IPV6_SRC_IP        = -10,
-    ERR_PP2_IPV6_DST_IP        = -11,
-    ERR_PP2_TLV_LENGTH         = -12,
-    ERR_PP2_TYPE_CRC32C        = -13,
-    ERR_PP2_TYPE_SSL           = -14,
-    ERR_PP2_TYPE_UNIQUE_ID     = -15,
-    ERR_PP2_TYPE_AWS           = -16,
-    ERR_PP2_TYPE_AZURE         = -17,
-    ERR_PP1_CRLF               = -18,
-    ERR_PP1_PROXY              = -19,
-    ERR_PP1_SPACE              = -20,
-    ERR_PP1_TRANSPORT_FAMILY   = -21,
-    ERR_PP1_IPV4_SRC_IP        = -22,
-    ERR_PP1_IPV4_DST_IP        = -23,
-    ERR_PP1_IPV6_SRC_IP        = -24,
-    ERR_PP1_IPV6_DST_IP        = -25,
-    ERR_PP1_SRC_PORT           = -26,
-    ERR_PP1_DST_PORT           = -27,
-    ERR_HEAP_ALLOC             = -28,
+    ERR_PP_VERSION,
+    ERR_PP2_SIG,
+    ERR_PP2_VERSION,
+    ERR_PP2_CMD,
+    ERR_PP2_ADDR_FAMILY,
+    ERR_PP2_TRANSPORT_PROTOCOL,
+    ERR_PP2_LENGTH,
+    ERR_PP2_IPV4_SRC_IP,
+    ERR_PP2_IPV4_DST_IP,
+    ERR_PP2_IPV6_SRC_IP,
+    ERR_PP2_IPV6_DST_IP,
+    ERR_PP2_TLV_LENGTH,
+    ERR_PP2_TYPE_CRC32C,
+    ERR_PP2_TYPE_SSL,
+    ERR_PP2_TYPE_UNIQUE_ID,
+    ERR_PP2_TYPE_AWS,
+    ERR_PP2_TYPE_AZURE,
+    ERR_PP1_CRLF,
+    ERR_PP1_PROXY,
+    ERR_PP1_SPACE,
+    ERR_PP1_TRANSPORT_FAMILY,
+    ERR_PP1_IPV4_SRC_IP,
+    ERR_PP1_IPV4_DST_IP,
+    ERR_PP1_IPV6_SRC_IP,
+    ERR_PP1_IPV6_DST_IP,
+    ERR_PP1_SRC_PORT,
+    ERR_PP1_DST_PORT,
+    ERR_HEAP_ALLOC
 };
 
-typedef struct _tlv_array_t tlv_array_t;
+/* Returns a descriptive error message
+ *
+ * error    int32_t value from other API functions
+ * return   Pointer to the descriptive message if the error value is recognized else NULL
+ */
+const char *pp_strerror(int32_t error);
 
 typedef struct
 {
     uint8_t ssl;                /* 1: client connected over SSL/TLS 0: otherwise */
     uint8_t cert_in_connection; /* 1: client provided a certificate over the current connection 0: otherwise */
     uint8_t cert_in_session;    /* 1: client provided a certificate at least once over the TLS session this connection belongs to 0: otherwise */
-    uint8_t cert_verified;      /* 1: client presented a certificate and it was successfully verified 1: otherwise */
+    uint8_t cert_verified;      /* 1: client presented a certificate and it was successfully verified 0: otherwise */
 } pp2_ssl_info_t;
+
+typedef struct _pp2_tlv_t pp2_tlv_t;
+
+typedef struct
+{
+    uint32_t    len;  /* Number of elements  */
+    uint32_t    size; /* Allocated elements  */
+    pp2_tlv_t **tlvs; /* Pointer to pp2_tlv_t* elements */
+} tlv_array_t;
 
 typedef struct
 {
     uint8_t        local; /* 1: LOCAL 0: PROXY */
     pp2_ssl_info_t pp2_ssl_info;
+    tlv_array_t    tlv_array;
+    /*
+     * In creation:
+     *      1: calculate and add crc32c checksum TLV
+     *      0: no crc32c checksum
+     * In parsing:
+     *      1: crc32c checksum TLV is present. Optionally, pp_info_get_crc32c() can be used to get the value
+     *      0: crc32c checksum is not present
+     */
+    uint8_t crc32c;
 } pp2_info_t;
 
 enum
@@ -94,15 +118,23 @@ typedef struct
     uint16_t     src_port;
     uint16_t     dst_port;
     pp2_info_t   pp2_info;
-    tlv_array_t *tlv_array;
 } pp_info_t;
 
-/* Returns a descriptive error message
+
+/* Adds the specified TLV in the given pp_info
  *
- * error    int32_t value from other API functions
- * return   Pointer to the descriptive message if the error value is recognized else NULL
+ * pp_info          Pointer to a pp_info_t structure to be used in pp_create_hdr()
+ * length           The length of the TLV's value in case it is not a US-ASCII value
+ * $value_param(s)  The value(s) of the specified TLV
+ * return           1: success 0: failure
  */
-const char *pp_strerror(int32_t error);
+uint8_t pp_info_add_alpn(pp_info_t *pp_info, uint16_t length, const uint8_t *alpn);
+uint8_t pp_info_add_authority(pp_info_t *pp_info, uint16_t length, const uint8_t *host_name);
+uint8_t pp_info_add_unique_id(pp_info_t *pp_info, uint16_t length, const uint8_t *unique_id);
+uint8_t pp_info_add_ssl(pp_info_t *pp_info, const char *version, const char *cipher, const char *sig_alg, const char *key_alg, const uint8_t *cn, uint16_t cn_len);
+uint8_t pp_info_add_netns(pp_info_t *pp_info, const char *netns);
+uint8_t pp_info_add_aws_vpce_id(pp_info_t *pp_info, const char *vpce_id);
+uint8_t pp_info_add_azure_linkid(pp_info_t *pp_info, uint32_t linkid);
 
 /* Searches for the specified TLV and returns its value
  *
@@ -120,7 +152,7 @@ const uint8_t *pp_info_get_ssl_cn(const pp_info_t *pp_info, uint16_t *length);
 const uint8_t *pp_info_get_ssl_cipher(const pp_info_t *pp_info, uint16_t *length);
 const uint8_t *pp_info_get_ssl_sig_alg(const pp_info_t *pp_info, uint16_t *length);
 const uint8_t *pp_info_get_ssl_key_alg(const pp_info_t *pp_info, uint16_t *length);
-const uint8_t *pp_info_get_ssl_netns(const pp_info_t *pp_info, uint16_t *length);
+const uint8_t *pp_info_get_netns(const pp_info_t *pp_info, uint16_t *length);
 const uint8_t *pp_info_get_aws_vpce_id(const pp_info_t *pp_info, uint16_t *length);
 const uint8_t *pp_info_get_azure_linkid(const pp_info_t *pp_info, uint16_t *length);
 
@@ -138,7 +170,7 @@ void pp_info_clear(pp_info_t *pp_info);
  * pp_hdr_len   Pointer to a uint16_t where the length of the create PROXY protocol header will be set
  * error        Pointer to a uint32_t where the error value will be set
  *                  ERR_NULL No error occurred
- *                  < 0      Error
+ *                  < 0      Error occurred. pp_strerror() with that value can be used to get a descriptive message
  * return       Pointer to a heap allocated buffer containing the PROXY protocol header. Must be freed with free()
  */
 uint8_t *pp_create_hdr(uint8_t version, const pp_info_t *pp_info, uint16_t *pp_hdr_len, int32_t *error);
