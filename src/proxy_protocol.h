@@ -128,10 +128,10 @@ typedef struct
  * $value_param(s)  The value(s) of the specified TLV
  * return           1: success 0: failure
  */
-uint8_t pp_info_add_alpn(pp_info_t *pp_info, uint16_t length, const void *alpn);
-uint8_t pp_info_add_authority(pp_info_t *pp_info, uint16_t length, const void *host_name);
-uint8_t pp_info_add_unique_id(pp_info_t *pp_info, uint16_t length, const void *unique_id);
-uint8_t pp_info_add_ssl(pp_info_t *pp_info, const char *version, const char *cipher, const char *sig_alg, const char *key_alg, const char *cn, uint16_t cn_len);
+uint8_t pp_info_add_alpn(pp_info_t *pp_info, uint16_t length, const uint8_t *alpn);
+uint8_t pp_info_add_authority(pp_info_t *pp_info, uint16_t length, const uint8_t *host_name);
+uint8_t pp_info_add_unique_id(pp_info_t *pp_info, uint16_t length, const uint8_t *unique_id);
+uint8_t pp_info_add_ssl(pp_info_t *pp_info, const char *version, const char *cipher, const char *sig_alg, const char *key_alg, const uint8_t *cn, uint16_t cn_len);
 uint8_t pp_info_add_netns(pp_info_t *pp_info, const char *netns);
 uint8_t pp_info_add_aws_vpce_id(pp_info_t *pp_info, const char *vpce_id);
 uint8_t pp_info_add_azure_linkid(pp_info_t *pp_info, uint32_t linkid);

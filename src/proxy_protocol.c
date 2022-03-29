@@ -272,17 +272,17 @@ static uint8_t tlv_array_append_tlv_new_usascii(tlv_array_t *tlv_array, uint8_t 
     return 1;
 }
 
-uint8_t pp_info_add_alpn(pp_info_t *pp_info, uint16_t length, const void *alpn)
+uint8_t pp_info_add_alpn(pp_info_t *pp_info, uint16_t length, const uint8_t *alpn)
 {
     return tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, PP2_TYPE_ALPN, length, alpn);
 }
 
-uint8_t pp_info_add_authority(pp_info_t *pp_info, uint16_t length, const void *host_name)
+uint8_t pp_info_add_authority(pp_info_t *pp_info, uint16_t length, const uint8_t *host_name)
 {
     return tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, PP2_TYPE_AUTHORITY, length, host_name);
 }
 
-uint8_t pp_info_add_unique_id(pp_info_t *pp_info, uint16_t length, const void *unique_id)
+uint8_t pp_info_add_unique_id(pp_info_t *pp_info, uint16_t length, const uint8_t *unique_id)
 {
     if (length > 128)
     {
@@ -291,7 +291,7 @@ uint8_t pp_info_add_unique_id(pp_info_t *pp_info, uint16_t length, const void *u
     return tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, PP2_TYPE_UNIQUE_ID, length, unique_id);
 }
 
-static void pp_info_add_subtype_ssl(uint8_t *value, uint16_t *index, uint8_t subtype_ssl, uint16_t length, const uint8_t *subtype_ssl_value)
+static void pp_info_add_subtype_ssl(uint8_t *value, uint16_t *index, uint8_t subtype_ssl, uint16_t length, const void *subtype_ssl_value)
 {
     if (!length || !subtype_ssl_value)
     {
@@ -304,7 +304,7 @@ static void pp_info_add_subtype_ssl(uint8_t *value, uint16_t *index, uint8_t sub
     *index += length;
 }
 
-uint8_t pp_info_add_ssl(pp_info_t *pp_info, const char *version, const char *cipher, const char *sig_alg, const char *key_alg, const char *cn, uint16_t cn_value_len)
+uint8_t pp_info_add_ssl(pp_info_t *pp_info, const char *version, const char *cipher, const char *sig_alg, const char *key_alg, const uint8_t *cn, uint16_t cn_value_len)
 {
     const pp2_ssl_info_t *pp2_ssl_info = &pp_info->pp2_info.pp2_ssl_info;
     uint8_t client = pp2_ssl_info->ssl | pp2_ssl_info->cert_in_connection << 1 | pp2_ssl_info->cert_in_connection << 2;
@@ -330,24 +330,24 @@ uint8_t pp_info_add_ssl(pp_info_t *pp_info, const char *version, const char *cip
     value[index++] = client;
     memcpy(value + index, &verify, sizeof(verify));
     index += sizeof(verify);
-    pp_info_add_subtype_ssl(value, &index, PP2_SUBTYPE_SSL_VERSION, (uint16_t)version_value_len, version);
-    pp_info_add_subtype_ssl(value, &index, PP2_SUBTYPE_SSL_CIPHER, (uint16_t)cipher_value_len, cipher);
-    pp_info_add_subtype_ssl(value, &index, PP2_SUBTYPE_SSL_SIG_ALG, (uint16_t)sig_alg_value_len, sig_alg);
-    pp_info_add_subtype_ssl(value, &index, PP2_SUBTYPE_SSL_KEY_ALG, (uint16_t)key_alg_value_len, key_alg);
+    pp_info_add_subtype_ssl(value, &index, PP2_SUBTYPE_SSL_VERSION, (uint16_t) version_value_len, version);
+    pp_info_add_subtype_ssl(value, &index, PP2_SUBTYPE_SSL_CIPHER, (uint16_t) cipher_value_len, cipher);
+    pp_info_add_subtype_ssl(value, &index, PP2_SUBTYPE_SSL_SIG_ALG, (uint16_t) sig_alg_value_len, sig_alg);
+    pp_info_add_subtype_ssl(value, &index, PP2_SUBTYPE_SSL_KEY_ALG, (uint16_t) key_alg_value_len, key_alg);
     pp_info_add_subtype_ssl(value, &index, PP2_SUBTYPE_SSL_CN, cn_value_len, cn);
-    uint8_t rc = tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, PP2_TYPE_SSL, (uint16_t)length, value);
+    uint8_t rc = tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, PP2_TYPE_SSL, (uint16_t) length, value);
     free(value);
     return rc;
 }
 
 uint8_t pp_info_add_netns(pp_info_t *pp_info, const char *netns)
 {
-    return tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, PP2_TYPE_NETNS, (uint16_t)strlen(netns), netns);
+    return tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, PP2_TYPE_NETNS, (uint16_t) strlen(netns), netns);
 }
 
 uint8_t pp_info_add_aws_vpce_id(pp_info_t *pp_info, const char *vpce_id)
 {
-    uint16_t length = (uint16_t)(sizeof_pp2_tlv_aws_t + strlen(vpce_id));
+    uint16_t length = (uint16_t) (sizeof_pp2_tlv_aws_t + strlen(vpce_id));
     pp2_tlv_aws_t *pp2_tlv_aws = malloc(length);
     pp2_tlv_aws->type = PP2_SUBTYPE_AWS_VPCE_ID;
     memcpy(pp2_tlv_aws->value, vpce_id, strlen(vpce_id));
@@ -356,7 +356,7 @@ uint8_t pp_info_add_aws_vpce_id(pp_info_t *pp_info, const char *vpce_id)
 
 uint8_t pp_info_add_azure_linkid(pp_info_t *pp_info, uint32_t linkid)
 {
-    uint16_t length = (uint16_t)sizeof(pp2_tlv_azure_t);
+    uint16_t length = (uint16_t) sizeof(pp2_tlv_azure_t);
     pp2_tlv_azure_t *pp2_tlv_azure = malloc(length);
     pp2_tlv_azure->type = PP2_SUBTYPE_AZURE_PRIVATEENDPOINT_LINKID;
     pp2_tlv_azure->linkid = linkid;
@@ -761,7 +761,7 @@ uint8_t *pp_create_hdr(uint8_t version, const pp_info_t *pp_info, uint16_t *pp_h
 static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t *pp_info)
 {
     const uint8_t *pp2_hdr = buffer;
-    const proxy_hdr_v2_t *proxy_hdr_v2 = (proxy_hdr_v2_t *) buffer;
+    const proxy_hdr_v2_t *proxy_hdr_v2 = (proxy_hdr_v2_t*) buffer;
 
     /* The next byte (the 13th one) is the protocol version and command */
     /* The highest four bits contains the version. Only \x2 is accepted */
@@ -836,7 +836,7 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
      * - destination layer 4 address if any, in network byte order (port)
      */
     buffer += sizeof(proxy_hdr_v2_t);
-    proxy_addr_t *addr = (proxy_addr_t *) buffer;
+    proxy_addr_t *addr = (proxy_addr_t*) buffer;
     uint16_t tlv_vectors_len = 0;
     if (fam == AF_UNSPEC)
     {
@@ -890,7 +890,7 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
     /* Any TLV vector must be at least 3 bytes */
     while (tlv_vectors_len > 3)
     {
-        pp2_tlv_t *pp2_tlv = (pp2_tlv_t *) buffer;
+        pp2_tlv_t *pp2_tlv = (pp2_tlv_t*) buffer;
         uint16_t pp2_tlv_len = pp2_tlv->length_hi << 8 | pp2_tlv->length_lo;
         uint16_t pp2_tlv_offset = 3 + pp2_tlv_len;
         if (pp2_tlv_offset > tlv_vectors_len)
@@ -949,7 +949,7 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
             break;
         case PP2_TYPE_SSL:
         {
-            pp2_tlv_ssl_t *pp2_tlv_ssl = (pp2_tlv_ssl_t*)pp2_tlv->value;
+            pp2_tlv_ssl_t *pp2_tlv_ssl = (pp2_tlv_ssl_t*) pp2_tlv->value;
 
             /* Set the pp2_ssl_info */
             pp_info->pp2_info.pp2_ssl_info.ssl = !!(pp2_tlv_ssl->client & PP2_CLIENT_SSL);
@@ -962,7 +962,7 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
             uint16_t pp2_sub_tlv_offset = 0;
             while (pp2_sub_tlv_offset < pp2_tlvs_ssl_len)
             {
-                pp2_tlv_t *pp2_sub_tlv_ssl = (pp2_tlv_t * )((uint8_t*) pp2_tlv_ssl->sub_tlv + pp2_sub_tlv_offset);
+                pp2_tlv_t *pp2_sub_tlv_ssl = (pp2_tlv_t*) ((uint8_t*) pp2_tlv_ssl->sub_tlv + pp2_sub_tlv_offset);
                 uint16_t pp2_sub_tlv_ssl_len = pp2_sub_tlv_ssl->length_hi << 8 | pp2_sub_tlv_ssl->length_lo;
                 switch (pp2_sub_tlv_ssl->type)
                 {
@@ -1006,7 +1006,7 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
             {
                 return -ERR_PP2_TYPE_AWS;
             }
-            pp2_tlv_aws_t *pp2_tlv_aws = (pp2_tlv_aws_t *) pp2_tlv->value;
+            pp2_tlv_aws_t *pp2_tlv_aws = (pp2_tlv_aws_t*) pp2_tlv->value;
             /* Connection is done through Private Link/Interface VPC endpoint */
             if (pp2_tlv_aws->type == PP2_SUBTYPE_AWS_VPCE_ID) /* US-ASCII */
             {
@@ -1024,7 +1024,7 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
             {
                 return -ERR_PP2_TYPE_AZURE;
             }
-            pp2_tlv_azure_t *pp2_tlv_azure = (pp2_tlv_azure_t *) pp2_tlv->value;
+            pp2_tlv_azure_t *pp2_tlv_azure = (pp2_tlv_azure_t*) pp2_tlv->value;
             /* Connection is done through Private Link service */
             if (pp2_tlv_azure->type == PP2_TYPE_AZURE) /* 32-bit number */
             {
