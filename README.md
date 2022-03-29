@@ -1,63 +1,161 @@
 # libproxyprotocol
 An ANSI C library to parse and create [PROXY protocol](https://www.haproxy.org/download/2.6/doc/proxy-protocol.txt) v1 and v2 headers
-* Full coverage of the latest 2.6 specification in parsing all the v2 TLVs, including the custom ones from AWS and Azure.
-* Easy access of the values of the extracted v2 TLVs though the API. In case the v2 TLV values are US-ASCII string name, they are given as proper NULL terminated strings for easy usage.
+* Full coverage of the latest 2.6 specification in parsing and creating all the v2 TLVs, including the custom ones from AWS and Azure.
+* Easy access of the values of the extracted v2 TLVs though the API. In case the v2 TLV values are US-ASCII string names, they are given as proper NULL terminated strings for easy usage.
 * Socket free logic. Does not hook, manipulate, assume any networking. It merely works on buffers.
 * Compilable with most compilers and usable at any platform as it is written in ANSI C.
 
 ## Installation
 The library should be compilable to any platform as it is written in ANSI C. It comes with a Makefile which can create the shared library `libproxyprotocol.so` which can then be linked to your application. Special care has been taken to make it work with Windows as well. In that case you have to compile it to a .dll/.lib yourself. In case of Windows remember that you have to link with the `ws2_32.lib`. An example of this is shown in tests.
 
-## API
-### Parsing
-**`int32_t pp_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t *pp_info)`**:
+## API/Usage
+All the API details are in the proxy_protocol.h. The complete example for creating/parsing v1 and v2 PROXY protocol headers can be found at `examples/client_server.c`
 
-Inpects the buffer for a PROXY protocol header and extracts all the information if any.
-* `buffer`:         Pointer to a buffer with the data to parse. Normally it will be the buffer used to peek data from a socket.
-* `buffer_length`:  Buffer's length. Typically the bytes read from the `recv(MSG_PEEK)` operation.
-* `pp_info`:        Pointer to a `pp_info_t` structure which will get filled with all the extracted information.
-* `return`:
-   * \> 0 Length of the PROXY protocol header
-   * == 0 No PROXY protocol header found
-   * <  0 Error occurred. `pp_strerror()` with that value can be used to get a descriptive message
+### Create a v1 PROXY protocol header
+```
+pp_info_t pp_info_in_v1 = {
+        .address_family = ADDR_FAMILY_INET,
+        .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
+        .src_addr = "172.22.32.1",
+        .dst_addr = "172.22.33.1",
+        .src_port = 4040,
+        .dst_port = 443
+    };
+    uint16_t pp1_hdr_len;
+    uint32_t error;
+    uint8_t *pp1_hdr = pp_create_hdr(1, &pp_info_in_v1, &pp1_hdr_len, &error);
+    /* Clear the pp_info passed in pp_create_hdr(). Not really needed for v1 but good to do out of principle */
+    pp_info_clear(&pp_info_in_v1);
+    if (error != ERR_NULL)
+    {
+        fprintf(stderr, "pp_create_hdr() failed: %s", pp_strerror(error));
+        return EXIT_FAILURE;
+    }
+```
 
-You shall not pass your `pp_info_t` variable to `pp_parse()` again without first clearing it with `pp_info_clear()`
+### Parse a v1 PROXY protocol header
+```
+pp_info_t pp_info_out;
+    int32_t rc = pp_parse_hdr(pp1_hdr, pp1_hdr_len, &pp_info_out);
+    free(pp1_hdr);
+    if (!rc)
+    {
+        printf("Not a PROXY protocol header\n");
+    }
+    else if (rc < 0)
+    {
+        fprintf(stderr, "pp_parse_hdr() failed: %s", pp_strerror(rc));
+        pp_info_clear(&pp_info_out);
+        return EXIT_FAILURE;
+    }
+    else
+    {
+        printf("%d bytes PROXY protocol header: %s %s %hu %hu\n",
+            rc,
+            pp_info_out.src_addr, pp_info_out.dst_addr,
+            pp_info_out.src_port, pp_info_out.dst_port);
+    }
+    /* ALWAYS clear the pp_info after a call to pp_parse_hdr() */
+    pp_info_clear(&pp_info_out);
+```
+```
+45 bytes PROXY protocol header: 172.22.32.1 172.22.33.1 4040 443
+```
 
-**`void pp_info_clear(pp_info_t *pp_info)`**
+### Create a v2 PROXY protocol header
+```
+pp_info_t pp_info_in_v2 = {
+        .address_family = ADDR_FAMILY_INET,
+        .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
+        .src_addr = "192.168.10.100",
+        .dst_addr = "192.168.11.90",
+        .src_port = 42332,
+        .dst_port = 8080,
+        .pp2_info = {
+            .crc32c = 1,        /* Add crc32c checksum */
+            .pp2_ssl_info = {   /* Add SSL information */
+                .ssl = 1,
+                .cert_in_connection = 1,
+                .cert_in_session = 1,
+                .cert_verified = 1,
+            }
+        }
+    };
+    /* Add SSL TLVs */
+    /* IMPORTANT: Always clear the pp_info to be passed in pp_create_hdr() because TLVs are allocated in heap. Otherwise memory will be leaked */
+    if (!pp_info_add_ssl(&pp_info_in_v2, "TLSv1.2", "ECDHE-RSA-AES128-GCM-SHA256", "SHA256", "RSA2048", "example.com", 11))
+    {
+        fprintf(stderr, "pp_info_add_ssl() failed\n");
+        pp_info_clear(&pp_info_in_v2);
+        return EXIT_FAILURE;
+    }
+    /* Add Azure Link ID TLV */
+    if (!pp_info_add_azure_linkid(&pp_info_in_v2, 1234))
+    {
+        fprintf(stderr, "pp_info_add_azure_linkid() failed\n");
+        pp_info_clear(&pp_info_in_v2);
+        return EXIT_FAILURE;
+    }
+    uint8_t *pp2_hdr = pp_create_hdr(2, &pp_info_in_v2, &pp1_hdr_len, &error);
+    pp_info_clear(&pp_info_in_v2);
+    if (error != ERR_NULL)
+    {
+        fprintf(stderr, "pp_create_hdr() failed: %s", pp_strerror(error));
+        return EXIT_FAILURE;
+    }
+```
 
-Clears the `pp_info_t` structure and frees any allocated memory associated with it. Shall always be called after a call to `pp_parse()`
-* `pp_info`: Pointer to a filled `pp_info_t` structure which has been used to a previous call to `pp_parse()`
-
-**`const uint8_t *pp_info_get_*(const pp_info_t *pp_info, uint16_t *length);`**
-
-Searches for the specified TLV and returns its value
-* `pp_info` Pointer to a `pp_info_t` structure used in `pp_parse()`
-* `length`  Pointer to a `uint16_t` where the TLV's value length will be set
-* `return`  Pointer to a buffer holding the TLV's value if found else `NULL`. In case of US-ASCII value the buffer is `NULL` terminated
-
-### Creating
-**`uint8_t *pp_create_hdr(uint8_t version, const pp_info_t *pp_info, uint16_t *pp_hdr_len, int32_t *error)`**:
-
-Creates a PROXY protocol header considering the information inside the pp_info.
-* `version`:
-   * 0 Create a v1 PROXY protocol header.
-   * 1 Create a v2 PROXY protocol header.
-* `pp_info`:    Pointer to a filled `pp_info_t` structure whose information will be used for the creation of the PROXY protocol header.
-* `pp_hdr_len`: Pointer to a `uint16_t` where the length of the create PROXY protocol header will be set
-* `error`:      Pointer to a `int32_t` where the error value will be set
-   * `ERR_NULL` No error occurred
-   * < 0        Error
-* `return`: Pointer to a heap allocated buffer containing the PROXY protocol header. Must be freed with free()
-
-### Error reporting
-**`const char *pp_strerror(int32_t error)`**
-
-Returns a descriptive error message
-* `error`:  `int32_t` value from other API functions
-* `return`: Pointer to the descriptive message if the error value is recognized else `NULL`
-
-## Example
-See `examples/client_server.c`
-
-## In progress
-* Creating v2 PROXY protocol headers with TLVs is not yet supported. Will be added in the next major release
+### Parse a v2 PROXY protocol header
+```
+rc = pp_parse_hdr(pp2_hdr, pp1_hdr_len, &pp_info_out);
+    free(pp2_hdr);
+    if (!rc)
+    {
+        printf("Not a PROXY protocol header\n");
+    }
+    else if (rc < 0)
+    {
+        fprintf(stderr, "pp_parse_hdr() failed: %s", pp_strerror(rc));
+        pp_info_clear(&pp_info_out);
+        return EXIT_FAILURE;
+    }
+    else
+    {
+        uint16_t length, cn_length;
+        const uint8_t *azure_linkid = pp_info_get_azure_linkid(&pp_info_out, &length);
+        uint32_t linkid;
+        memcpy(&linkid, azure_linkid, length);
+        const uint8_t *cn = pp_info_get_ssl_cn(&pp_info_out, &cn_length);
+        printf("%d bytes PROXY protocol header:\n"
+               "\tAzure Link ID: %u\n"
+               "\tCRC32C checksum: %s\n"
+               "\tSSL version: %s\n"
+               "\tSSL cipher: %s\n"
+               "\tSSL sig_alg: %s\n"
+               "\tSSL key_alg: %s\n"
+               "\tSSL CN: %.*s\n"
+               "%s %s %hu %hu\n",
+            rc, linkid,
+            pp_info_out.pp2_info.crc32c == 1 ? "verified" : "not present",
+            pp_info_get_ssl_version(&pp_info_out, &length),
+            pp_info_get_ssl_cipher(&pp_info_out, &length),
+            pp_info_get_ssl_sig_alg(&pp_info_out, &length),
+            pp_info_get_ssl_key_alg(&pp_info_out, &length),
+            cn_length, cn,
+            pp_info_out.src_addr, pp_info_out.dst_addr,
+            pp_info_out.src_port, pp_info_out.dst_port);
+    }
+    /* ALWAYS clear the pp_info after a call to pp_parse_hdr() */
+    pp_info_clear(&pp_info_out);
+```
+```
+124 bytes PROXY protocol header:
+   Azure Link ID: 1234
+   CRC32C checksum: verified
+   SSL version: TLSv1.2
+   SSL cipher: ECDHE-RSA-AES128-GCM-SHA256
+   SSL sig_alg: SHA256
+   SSL key_alg: RSA2048
+   SSL CN: example.com
+   192.168.10.100 192.168.11.90 42332 8080
+```

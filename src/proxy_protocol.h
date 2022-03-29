@@ -88,7 +88,7 @@ typedef struct
      *      1: calculate and add crc32c checksum TLV
      *      0: no crc32c checksum
      * In parsing:
-     *      1: crc32c checksum TLV is present. Optionally, pp_info_get_crc32c() can be used to get the value
+     *      1: crc32c checksum TLV is present and verified. Optionally, pp_info_get_crc32c() can be used to get the value
      *      0: crc32c checksum is not present
      */
     uint8_t crc32c;
@@ -156,9 +156,14 @@ const uint8_t *pp_info_get_netns(const pp_info_t *pp_info, uint16_t *length);
 const uint8_t *pp_info_get_aws_vpce_id(const pp_info_t *pp_info, uint16_t *length);
 const uint8_t *pp_info_get_azure_linkid(const pp_info_t *pp_info, uint16_t *length);
 
-/* Clears the pp_info_t structure and frees any allocated memory associated with it. Shall always be called after a call to pp_parse_hdr()
+/* Clears the pp_info_t structure and frees any allocated memory associated with it
+ * Parsing: Always call it after pp_parse_hdr()
+ * Creating: Always call it after pp_create_hdr() or failure in pp_info_add_*() functions
  *
- * pp_info  Pointer to a filled pp_info_t structure which has been used to a previous call to pp_parse_hdr()
+ * In case it is forgotten and the parsing/creation is about a v2 PROXY protocol header with TLVs, memory leaks will appear!
+ *
+ * pp_info  Parsing: Pointer to a filled pp_info_t structure which has been used to a previous call to pp_parse_hdr()
+ *          Creating: Pointer to an initialized pp_info_t structure in which pp_info_add_*() functions have been used
  */
 void pp_info_clear(pp_info_t *pp_info);
 
@@ -170,7 +175,7 @@ void pp_info_clear(pp_info_t *pp_info);
  * pp_hdr_len   Pointer to a uint16_t where the length of the create PROXY protocol header will be set
  * error        Pointer to a uint32_t where the error value will be set
  *                  ERR_NULL No error occurred
- *                  < 0      Error occurred. pp_strerror() with that value can be used to get a descriptive message
+ *                  < 0      Error occurred. Optionally, pp_strerror() with that value can be used to get a descriptive message
  * return       Pointer to a heap allocated buffer containing the PROXY protocol header. Must be freed with free()
  */
 uint8_t *pp_create_hdr(uint8_t version, const pp_info_t *pp_info, uint16_t *pp_hdr_len, int32_t *error);
@@ -182,7 +187,7 @@ uint8_t *pp_create_hdr(uint8_t version, const pp_info_t *pp_info, uint16_t *pp_h
  * pp_info          Pointer to a pp_info_t structure which will get filled with all the extracted information
  * return           >  0 Length of the PROXY protocol header
  *                  == 0 No PROXY protocol header found
- *                  <  0 Error occurred. pp_strerror() with that value can be used to get a descriptive message
+ *                  <  0 Error occurred. Optionally, pp_strerror() with that value can be used to get a descriptive message
  */
 int32_t pp_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t *pp_info);
 
