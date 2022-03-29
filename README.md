@@ -22,7 +22,7 @@ pp_info_t pp_info_in_v1 = {
         .dst_port = 443
     };
 uint16_t pp1_hdr_len;
-uint32_t error;
+int32_t error;
 uint8_t *pp1_hdr = pp_create_hdr(1, &pp_info_in_v1, &pp1_hdr_len, &error);
 /* Clear the pp_info passed in pp_create_hdr(). Not really needed for v1 but good to do out of principle */
 pp_info_clear(&pp_info_in_v1);
