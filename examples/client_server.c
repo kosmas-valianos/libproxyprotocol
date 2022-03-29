@@ -75,11 +75,21 @@ int main()
         }
     };
     /* Add SSL TLVs */
-    pp_info_add_ssl(&pp_info_in_v2, "TLSv1.2", "ECDHE-RSA-AES128-GCM-SHA256", "SHA256", "RSA2048", "example.com", 11);
+    /* IMPORTANT: Always clear the pp_info to be passed in pp_create_hdr() because TLVs are allocated in heap. Otherwise memory will be leaked */
+    if (!pp_info_add_ssl(&pp_info_in_v2, "TLSv1.2", "ECDHE-RSA-AES128-GCM-SHA256", "SHA256", "RSA2048", "example.com", 11))
+    {
+        fprintf(stderr, "pp_info_add_ssl() failed\n");
+        pp_info_clear(&pp_info_in_v2);
+        return EXIT_FAILURE;
+    }
     /* Add Azure Link ID TLV */
-    pp_info_add_azure_linkid(&pp_info_in_v2, 1234);
+    if (!pp_info_add_azure_linkid(&pp_info_in_v2, 1234))
+    {
+        fprintf(stderr, "pp_info_add_azure_linkid() failed\n");
+        pp_info_clear(&pp_info_in_v2);
+        return EXIT_FAILURE;
+    }
     uint8_t *pp2_hdr = pp_create_hdr(2, &pp_info_in_v2, &pp1_hdr_len, &error);
-    /* IMPORTANT: Clear the pp_info passed in pp_create_hdr() because TLVs were created. Otherwise memory will be leaked */
     pp_info_clear(&pp_info_in_v2);
     if (error != ERR_NULL)
     {
@@ -115,7 +125,7 @@ int main()
                "\tSSL sig_alg: %s\n"
                "\tSSL key_alg: %s\n"
                "\tSSL CN: %.*s\n"
-               "%s %s %hu %hu\n",
+               "\t%s %s %hu %hu\n",
             rc, linkid,
             pp_info_out.pp2_info.crc32c == 1 ? "verified" : "not present",
             pp_info_get_ssl_version(&pp_info_out, &length),
