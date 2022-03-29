@@ -1026,7 +1026,7 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
             }
             pp2_tlv_azure_t *pp2_tlv_azure = (pp2_tlv_azure_t*) pp2_tlv->value;
             /* Connection is done through Private Link service */
-            if (pp2_tlv_azure->type == PP2_TYPE_AZURE) /* 32-bit number */
+            if (pp2_tlv_azure->type == PP2_SUBTYPE_AZURE_PRIVATEENDPOINT_LINKID) /* 32-bit number */
             {
                 pp2_tlv_t *tlv = tlv_new(pp2_tlv->type, pp2_tlv_len, pp2_tlv->value);
                 if (!tlv || !tlv_array_append_tlv(&pp_info->pp2_info.tlv_array, tlv))
