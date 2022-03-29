@@ -388,7 +388,7 @@ static const uint8_t *pp_info_get_tlv_value(const pp_info_t *pp_info, uint8_t ty
     uint32_t i;
     for (i = 0; i < pp_info->pp2_info.tlv_array.len; i++)
     {
-        pp2_tlv_t * tlv = pp_info->pp2_info.tlv_array.tlvs[i];
+        pp2_tlv_t *tlv = pp_info->pp2_info.tlv_array.tlvs[i];
         if (tlv->type == type)
         {
             *length = tlv->length_hi << 8 | tlv->length_lo;
