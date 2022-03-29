@@ -575,6 +575,7 @@ int main()
             }
 
             uint8_t *pp_hdr = pp_create_hdr(tests[i].version, &tests[i].pp_info_in, &pp_hdr_len, &error);
+            pp_info_clear(&tests[i].pp_info_in);
             if (!pp_hdr || error != ERR_NULL)
             {
                 printf("FAILED\n");

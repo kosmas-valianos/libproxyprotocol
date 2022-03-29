@@ -12,8 +12,8 @@
 
 int main()
 {
-    // Create a v1 PROXY protocol header
-    pp_info_t pp_info_in = {
+    /* Create a v1 PROXY protocol header */
+    pp_info_t pp_info_in_v1 = {
         .address_family = ADDR_FAMILY_INET,
         .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
         .src_addr = "172.22.32.1",
@@ -23,14 +23,16 @@ int main()
     };
     uint16_t pp1_hdr_len;
     uint32_t error;
-    uint8_t *pp1_hdr = pp_create_hdr(1, &pp_info_in, &pp1_hdr_len, &error);
+    uint8_t *pp1_hdr = pp_create_hdr(1, &pp_info_in_v1, &pp1_hdr_len, &error);
+    /* Clear the pp_info passed in pp_create_hdr(). Not really needed for v1 but good to do out of principle */
+    pp_info_clear(&pp_info_in_v1);
     if (error != ERR_NULL)
     {
         fprintf(stderr, "pp_create_hdr() failed: %s", pp_strerror(error));
         return EXIT_FAILURE;
     }
 
-    // Parse a v1 PROXY protocol header
+    /* Parse a v1 PROXY protocol header */
     pp_info_t pp_info_out;
     int32_t rc = pp_parse_hdr(pp1_hdr, pp1_hdr_len, &pp_info_out);
     free(pp1_hdr);
@@ -51,9 +53,10 @@ int main()
             pp_info_out.src_addr, pp_info_out.dst_addr,
             pp_info_out.src_port, pp_info_out.dst_port);
     }
+    /* ALWAYS clear the pp_info after a call to pp_parse_hdr() */
     pp_info_clear(&pp_info_out);
 
-    // Create a v2 PROXY protocol header with some TLVs
+    /* Create a v2 PROXY protocol header with some TLVs */
     pp_info_t pp_info_in_v2 = {
         .address_family = ADDR_FAMILY_INET,
         .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
@@ -71,15 +74,20 @@ int main()
             }
         }
     };
+    /* Add SSL TLVs */
     pp_info_add_ssl(&pp_info_in_v2, "TLSv1.2", "ECDHE-RSA-AES128-GCM-SHA256", "SHA256", "RSA2048", "example.com", 11);
+    /* Add Azure Link ID TLV */
     pp_info_add_azure_linkid(&pp_info_in_v2, 1234);
     uint8_t *pp2_hdr = pp_create_hdr(2, &pp_info_in_v2, &pp1_hdr_len, &error);
+    /* IMPORTANT: Clear the pp_info passed in pp_create_hdr() because TLVs were created. Otherwise memory will be leaked */
+    pp_info_clear(&pp_info_in_v2);
     if (error != ERR_NULL)
     {
         fprintf(stderr, "pp_create_hdr() failed: %s", pp_strerror(error));
         return EXIT_FAILURE;
     }
 
+    /* Parse a v2 PROXY protocol header */
     rc = pp_parse_hdr(pp2_hdr, pp1_hdr_len, &pp_info_out);
     free(pp2_hdr);
     if (!rc)
@@ -106,7 +114,7 @@ int main()
                "\tSSL cipher: %s\n"
                "\tSSL sig_alg: %s\n"
                "\tSSL key_alg: %s\n"
-               "\tSSL CN: %*s\n"
+               "\tSSL CN: %.*s\n"
                "%s %s %hu %hu\n",
             rc, linkid,
             pp_info_out.pp2_info.crc32c == 1 ? "verified" : "not present",
@@ -118,6 +126,7 @@ int main()
             pp_info_out.src_addr, pp_info_out.dst_addr,
             pp_info_out.src_port, pp_info_out.dst_port);
     }
+    /* ALWAYS clear the pp_info after a call to pp_parse_hdr() */
     pp_info_clear(&pp_info_out);
 
     return EXIT_SUCCESS;

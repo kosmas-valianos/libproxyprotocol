@@ -351,7 +351,9 @@ uint8_t pp_info_add_aws_vpce_id(pp_info_t *pp_info, const char *vpce_id)
     pp2_tlv_aws_t *pp2_tlv_aws = malloc(length);
     pp2_tlv_aws->type = PP2_SUBTYPE_AWS_VPCE_ID;
     memcpy(pp2_tlv_aws->value, vpce_id, strlen(vpce_id));
-    return tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, PP2_TYPE_AWS, length, pp2_tlv_aws);
+    uint8_t rc = tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, PP2_TYPE_AWS, length, pp2_tlv_aws);
+    free(pp2_tlv_aws);
+    return rc;
 }
 
 uint8_t pp_info_add_azure_linkid(pp_info_t *pp_info, uint32_t linkid)
@@ -360,7 +362,9 @@ uint8_t pp_info_add_azure_linkid(pp_info_t *pp_info, uint32_t linkid)
     pp2_tlv_azure_t *pp2_tlv_azure = malloc(length);
     pp2_tlv_azure->type = PP2_SUBTYPE_AZURE_PRIVATEENDPOINT_LINKID;
     pp2_tlv_azure->linkid = linkid;
-    return tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, PP2_TYPE_AZURE, length, pp2_tlv_azure);
+    uint8_t rc = tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, PP2_TYPE_AZURE, length, pp2_tlv_azure);
+    free(pp2_tlv_azure);
+    return rc;
 }
 
 static void tlv_array_clear(tlv_array_t *tlv_array)
