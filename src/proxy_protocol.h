@@ -80,7 +80,16 @@ typedef struct
 
 typedef struct
 {
-    uint8_t        local; /* 1: LOCAL 0: PROXY */
+    uint8_t local;  /* 1: LOCAL 0: PROXY */
+    /*
+     * In creation
+     *      > 1: The power of 2 in which the header will be aligned using a NOOP TLV.
+     *           Example: 2 => 2^2 => 4 => Append enough bytes to the header using the NOOP TLV so that size_of_hdr % 4 becomes 0
+     *      <= 1: No alignment, padding
+     * In parsing:
+     *      Ignored
+     */
+    uint8_t        align_padding;
     pp2_ssl_info_t pp2_ssl_info;
     tlv_array_t    tlv_array;
     /*
