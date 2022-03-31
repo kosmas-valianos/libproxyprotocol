@@ -2,12 +2,7 @@
 
 ## Supported Versions
 
-Versions prior to 1.0.0 which is considered the first official release are not supported
-
-| Version | Supported          |
-| ------- | ------------------ |
-| 1.0.0   | :white_check_mark: |
-| < 1.0.0 | :x:              |
+There will be no backport to any previous releases rather a new release will be made to include the fix.
 
 ## Reporting a Vulnerability
 
