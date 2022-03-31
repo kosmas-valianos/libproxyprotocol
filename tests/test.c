@@ -423,7 +423,7 @@ int main()
             .pp_info_out_expected = tests[8].pp_info_in,
         },
         {
-            .name = "v2 PROXY protocol header: create and parse - PROXY, TCP over IPv4. TLVs: "
+            .name = "v2 PROXY protocol header: create and parse - PROXY, TCP over IPv4. Aligned, padded. TLVs: "
                     "PP2_TYPE_SSL, PP2_SUBTYPE_SSL_VERSION, PP2_SUBTYPE_SSL_CN, PP2_SUBTYPE_SSL_CIPHER,"
                     "PP2_SUBTYPE_SSL_SIG_ALG, PP2_SUBTYPE_SSL_KEY_ALG, PP2_TYPE_AWS(PP2_SUBTYPE_AWS_VPCE_ID), PP2_TYPE_CRC32C",
             .version = 2,
@@ -435,13 +435,14 @@ int main()
                 .src_port = 42332,
                 .dst_port = 8080,
                 .pp2_info = {
-                    .crc32c = 1,
+                    .align_padding = 2,
                     .pp2_ssl_info = {
                         .ssl = 1,
                         .cert_in_connection = 1,
                         .cert_in_session = 1,
                         .cert_verified = 1,
-                    }
+                    },
+                    .crc32c = 1
                 }
             },
             .add_tlvs = {
@@ -452,9 +453,8 @@ int main()
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_CN,
-                    .value_len = 11,
-                    /* example.com */
-                    .value = (uint8_t*) "\x65\x78\x61\x6d\x70\x6c\x65\x2e\x63\x6f\x6d"
+                    .value_len = 18,
+                    .value = (uint8_t*) "proxy-protocol.com"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_CIPHER,
@@ -480,7 +480,7 @@ int main()
                 {
                     .type = PP2_TYPE_CRC32C,
                     .value_len = 4,
-                    .value = (uint8_t*) "\x72\x45\x29\xd8"
+                    .value = (uint8_t*) "\x75\x40\xf1\x2f"
                 },
             },
             .pp_info_out_expected = tests[9].pp_info_in,
@@ -516,8 +516,7 @@ int main()
                 {
                     .type = PP2_SUBTYPE_SSL_CN,
                     .value_len = 11,
-                    /* example.com */
-                    .value = (uint8_t*) "\x65\x78\x61\x6d\x70\x6c\x65\x2e\x63\x6f\x6d"
+                    .value = (uint8_t*) "example.com"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_CIPHER,
@@ -561,6 +560,7 @@ int main()
         else
         {
             uint16_t pp_hdr_len;
+            uint16_t pow = 1 << tests[i].pp_info_in.pp2_info.align_padding;
             int32_t error;
 
             if (tests[i].add_tlvs[0].type)
@@ -576,7 +576,9 @@ int main()
 
             uint8_t *pp_hdr = pp_create_hdr(tests[i].version, &tests[i].pp_info_in, &pp_hdr_len, &error);
             pp_info_clear(&tests[i].pp_info_in);
-            if (!pp_hdr || error != ERR_NULL)
+            if (!pp_hdr
+                || error != ERR_NULL
+                || (pow > 1 && pp_hdr_len % pow))
             {
                 printf("FAILED\n");
                 pp_info_clear(&pp_info_out);

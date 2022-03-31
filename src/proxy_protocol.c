@@ -644,6 +644,7 @@ uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, int32_t
     /* Calculate the total length */
     uint16_t len = proxy_addr_len;
     const tlv_array_t *tlv_array = &pp_info->pp2_info.tlv_array;
+    uint16_t padding_bytes = 0;
     uint32_t i;
     for (i = 0; i < tlv_array->len; i++)
     {
@@ -654,10 +655,20 @@ uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, int32_t
     {
         len += sizeof_pp2_tlv_t + sizeof(uint32_t);
     }
+    *pp2_hdr_len = sizeof(proxy_hdr_v2_t) + len;
+    if (pp_info->pp2_info.align_padding > 1)
+    {
+        uint16_t pow = 1 << pp_info->pp2_info.align_padding;
+        if (*pp2_hdr_len % pow)
+        {
+            padding_bytes = (*pp2_hdr_len - sizeof_pp2_tlv_t) % pow;
+            len += sizeof_pp2_tlv_t + padding_bytes;
+            *pp2_hdr_len = sizeof(proxy_hdr_v2_t) + len;
+        }
+    }
     proxy_hdr_v2.len = htons(len);
 
     /* Create the PROXY protocol header */
-    *pp2_hdr_len = sizeof(proxy_hdr_v2_t) + len;
     uint8_t *pp2_hdr = malloc(*pp2_hdr_len);
     if (!pp2_hdr)
     {
@@ -676,6 +687,18 @@ uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, int32_t
         uint16_t tlv_len = sizeof_pp2_tlv_t + (tlv_array->tlvs[i]->length_hi << 8 | tlv_array->tlvs[i]->length_lo);
         memcpy(pp2_hdr + index, tlv_array->tlvs[i], tlv_len);
         index += tlv_len;
+    }
+    if (pp_info->pp2_info.align_padding > 1)
+    {
+        pp2_tlv_t tlv = {
+            .type = PP2_TYPE_NOOP,
+            .length_hi = padding_bytes >> 8,
+            .length_lo = padding_bytes & 0x00ff
+        };
+        memcpy(pp2_hdr + index, &tlv, sizeof_pp2_tlv_t);
+        index += sizeof_pp2_tlv_t;
+        memset(pp2_hdr + index, 0, padding_bytes);
+        index += padding_bytes;
     }
     if (pp_info->pp2_info.crc32c)
     {
