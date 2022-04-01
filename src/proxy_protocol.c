@@ -721,6 +721,16 @@ uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, int32_t
     return pp2_hdr;
 }
 
+uint8_t *pp2_create_healthcheck_hdr(uint16_t *pp2_hdr_len, int32_t *error)
+{
+    pp_info_t pp_info = {
+        .address_family = ADDR_FAMILY_UNSPEC,
+        .transport_protocol = TRANSPORT_PROTOCOL_UNSPEC,
+        .pp2_info.local = 1
+    };
+    return pp2_create_hdr(&pp_info, pp2_hdr_len, error);
+}
+
 static uint8_t *pp1_create_hdr(const pp_info_t *pp_info, uint16_t *pp1_hdr_len, int32_t *error)
 {
     if (pp_info->transport_protocol != TRANSPORT_PROTOCOL_UNSPEC && pp_info->transport_protocol != TRANSPORT_PROTOCOL_STREAM)
