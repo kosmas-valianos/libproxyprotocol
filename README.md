@@ -1,5 +1,5 @@
 # libproxyprotocol
-An ANSI C library to parse and create [PROXY protocol](https://www.haproxy.org/download/2.6/doc/proxy-protocol.txt) v1 and v2 headers with support for **all TLVs**
+An ANSI C library to **parse** and **create** [PROXY protocol](https://www.haproxy.org/download/2.6/doc/proxy-protocol.txt) v1 and v2 headers with support for **all TLVs**
 * Full coverage of the latest 2.6 specification in parsing and creating all the v2 TLVs, including the custom ones from AWS and Azure.
 * Easy access of the values of the extracted v2 TLVs though the API. In case the v2 TLV values are US-ASCII string names, they are given as proper NULL terminated strings for easy usage.
 * Easy way through the API to request a specific alignment when creating v2 PROXY protocol headers.
