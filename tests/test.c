@@ -66,6 +66,7 @@ typedef struct
 {
     const char *name;
     uint8_t     version;
+    uint8_t     create_healthcheck;
     pp_info_t   pp_info_in;
     uint8_t    *raw_bytes_in;
     uint32_t    raw_bytes_in_length;
@@ -447,40 +448,40 @@ int main()
             },
             .add_tlvs = {
                 {
-                    .type = PP2_SUBTYPE_SSL_VERSION,
+                .type = PP2_SUBTYPE_SSL_VERSION,
                     .value_len = 8,
-                    .value = (uint8_t*) "TLSv1.2"
+                    .value = (uint8_t*)"TLSv1.2"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_CN,
                     .value_len = 18,
-                    .value = (uint8_t*) "proxy-protocol.com"
+                    .value = (uint8_t*)"proxy-protocol.com"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_CIPHER,
                     .value_len = 28,
-                    .value = (uint8_t*) "ECDHE-RSA-AES128-GCM-SHA256"
+                    .value = (uint8_t*)"ECDHE-RSA-AES128-GCM-SHA256"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_SIG_ALG,
                     .value_len = 7,
-                    .value = (uint8_t*) "SHA256"
+                    .value = (uint8_t*)"SHA256"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_KEY_ALG,
                     .value_len = 8,
-                    .value = (uint8_t*) "RSA2048"
+                    .value = (uint8_t*)"RSA2048"
                 },
                 {
                     .type = PP2_TYPE_AWS,
                     .subtype = PP2_SUBTYPE_AWS_VPCE_ID,
                     .value_len = 24,
-                    .value = (uint8_t*) "vpce-24d8ezjk38bchilm4m"
+                    .value = (uint8_t*)"vpce-24d8ezjk38bchilm4m"
                 },
                 {
                     .type = PP2_TYPE_CRC32C,
                     .value_len = 4,
-                    .value = (uint8_t*) "\x43\x84\x86\x4e"
+                    .value = (uint8_t*)"\x43\x84\x86\x4e"
                 },
             },
             .pp_info_out_expected = tests[9].pp_info_in,
@@ -511,27 +512,27 @@ int main()
                 {
                     .type = PP2_SUBTYPE_SSL_VERSION,
                     .value_len = 8,
-                    .value = (uint8_t*) "TLSv1.2"
+                    .value = (uint8_t*)"TLSv1.2"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_CN,
                     .value_len = 11,
-                    .value = (uint8_t*) "example.com"
+                    .value = (uint8_t*)"example.com"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_CIPHER,
                     .value_len = 28,
-                    .value = (uint8_t*) "ECDHE-RSA-AES128-GCM-SHA256"
+                    .value = (uint8_t*)"ECDHE-RSA-AES128-GCM-SHA256"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_SIG_ALG,
                     .value_len = 7,
-                    .value = (uint8_t*) "SHA256"
+                    .value = (uint8_t*)"SHA256"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_KEY_ALG,
                     .value_len = 8,
-                    .value = (uint8_t*) "RSA2048"
+                    .value = (uint8_t*)"RSA2048"
                 },
             },
         },
@@ -543,6 +544,15 @@ int main()
                 .transport_protocol = TRANSPORT_PROTOCOL_UNSPEC,
             },
             .pp_info_out_expected = tests[11].pp_info_in,
+        },
+        {
+            .name = "v2 PROXY protocol header: pp2_create_healthcheck_hdr() and parse - LOCAL, AF_UNSPEC",
+            .create_healthcheck = 1,
+            .pp_info_out_expected = {
+                .address_family = ADDR_FAMILY_UNSPEC,
+                .transport_protocol = TRANSPORT_PROTOCOL_UNSPEC,
+                .pp2_info.local = 1
+            },
         },
     };
 
@@ -574,8 +584,16 @@ int main()
                 }
             }
 
-            uint8_t *pp_hdr = pp_create_hdr(tests[i].version, &tests[i].pp_info_in, &pp_hdr_len, &error);
-            pp_info_clear(&tests[i].pp_info_in);
+            uint8_t *pp_hdr = NULL;
+            if (tests[i].create_healthcheck)
+            {
+                pp_hdr = pp2_create_healthcheck_hdr(&pp_hdr_len, &error);
+            }
+            else
+            {
+                pp_hdr = pp_create_hdr(tests[i].version, &tests[i].pp_info_in, &pp_hdr_len, &error);
+                pp_info_clear(&tests[i].pp_info_in);
+            }
             if (!pp_hdr
                 || error != ERR_NULL
                 || (alignment > 1 && pp_hdr_len % alignment))
