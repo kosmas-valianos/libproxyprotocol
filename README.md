@@ -3,6 +3,7 @@ An ANSI C library to **parse** and **create** [PROXY protocol](https://www.hapro
 * Full coverage of the latest 2.6 specification in parsing and creating all the v2 TLVs, including the custom ones from AWS and Azure.
 * Easy access of the values of the extracted v2 TLVs though the API. In case the v2 TLV values are US-ASCII string names, they are given as proper NULL terminated strings for easy usage.
 * Easy way through the API to request a specific alignment when creating v2 PROXY protocol headers.
+* Easy way through an API function to create health check v2 PROXY protocol headers.
 * Socket free logic. Does not hook, manipulate, assume any networking. It merely works on buffers.
 * Compilable with most compilers and usable at any platform as it is written in ANSI C.
 
