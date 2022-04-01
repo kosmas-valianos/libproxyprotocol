@@ -656,14 +656,21 @@ uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, int32_t
         len += sizeof_pp2_tlv_t + sizeof(uint32_t);
     }
     *pp2_hdr_len = sizeof(proxy_hdr_v2_t) + len;
-    if (pp_info->pp2_info.align_padding > 1)
+    if (pp_info->pp2_info.alignment_power > 1)
     {
-        uint16_t pow = 1 << pp_info->pp2_info.align_padding;
-        if (*pp2_hdr_len % pow)
+        uint16_t alignment = 1 << pp_info->pp2_info.alignment_power;
+        if (*pp2_hdr_len % alignment)
         {
-            padding_bytes = (*pp2_hdr_len - sizeof_pp2_tlv_t) % pow;
-            len += sizeof_pp2_tlv_t + padding_bytes;
-            *pp2_hdr_len = sizeof(proxy_hdr_v2_t) + len;
+            uint16_t pp2_hdr_len_padded = (*pp2_hdr_len / alignment + 1) * alignment;
+            /* The NOOP TLV needs to be at least 3 bytes because a TLV can not be smaller than that */
+            if (pp2_hdr_len_padded - *pp2_hdr_len < 3)
+            {
+                pp2_hdr_len_padded += alignment;
+            }
+            padding_bytes = pp2_hdr_len_padded - sizeof(proxy_hdr_v2_t) - len - sizeof_pp2_tlv_t;
+
+            *pp2_hdr_len = pp2_hdr_len_padded;
+            len = pp2_hdr_len_padded - sizeof(proxy_hdr_v2_t);
         }
     }
     proxy_hdr_v2.len = htons(len);
@@ -688,7 +695,7 @@ uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, int32_t
         memcpy(pp2_hdr + index, tlv_array->tlvs[i], tlv_len);
         index += tlv_len;
     }
-    if (pp_info->pp2_info.align_padding > 1)
+    if (pp_info->pp2_info.alignment_power > 1)
     {
         pp2_tlv_t tlv = {
             .type = PP2_TYPE_NOOP,
