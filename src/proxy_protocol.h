@@ -182,7 +182,7 @@ void pp_info_clear(pp_info_t *pp_info);
  *       SHOULD build a valid PROXY line i.e. usage of "UNKNOWN" style is discouraged 
  * 
  * pp_hdr_len   Pointer to a uint16_t where the length of the create PROXY protocol header will be set
- * error        Pointer to a uint32_t where the error value will be set
+ * error        Pointer to a int32_t where the error value will be set
  *                  ERR_NULL No error occurred
  *                  < 0      Error occurred. Optionally, pp_strerror() with that value can be used to get a descriptive message
  * return       Pointer to a heap allocated buffer containing the PROXY protocol header. Must be freed with free()
@@ -195,7 +195,7 @@ uint8_t *pp2_create_healthcheck_hdr(uint16_t *pp2_hdr_len, int32_t *error);
  *              1 Create a v2 PROXY protocol header
  * pp_info      Pointer to a filled pp_info_t structure whose information will be used for the creation of the PROXY protocol header
  * pp_hdr_len   Pointer to a uint16_t where the length of the create PROXY protocol header will be set
- * error        Pointer to a uint32_t where the error value will be set
+ * error        Pointer to a int32_t where the error value will be set
  *                  ERR_NULL No error occurred
  *                  < 0      Error occurred. Optionally, pp_strerror() with that value can be used to get a descriptive message
  * return       Pointer to a heap allocated buffer containing the PROXY protocol header. Must be freed with free()
