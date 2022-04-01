@@ -435,7 +435,7 @@ int main()
                 .src_port = 42332,
                 .dst_port = 8080,
                 .pp2_info = {
-                    .align_padding = 2,
+                    .alignment_power = 2,
                     .pp2_ssl_info = {
                         .ssl = 1,
                         .cert_in_connection = 1,
@@ -474,13 +474,13 @@ int main()
                 {
                     .type = PP2_TYPE_AWS,
                     .subtype = PP2_SUBTYPE_AWS_VPCE_ID,
-                    .value_len = 23,
-                    .value = (uint8_t*) "vpce-24d8ezjk38bchilm4"
+                    .value_len = 24,
+                    .value = (uint8_t*) "vpce-24d8ezjk38bchilm4m"
                 },
                 {
                     .type = PP2_TYPE_CRC32C,
                     .value_len = 4,
-                    .value = (uint8_t*) "\x75\x40\xf1\x2f"
+                    .value = (uint8_t*) "\x43\x84\x86\x4e"
                 },
             },
             .pp_info_out_expected = tests[9].pp_info_in,
@@ -560,7 +560,7 @@ int main()
         else
         {
             uint16_t pp_hdr_len;
-            uint16_t pow = 1 << tests[i].pp_info_in.pp2_info.align_padding;
+            uint16_t alignment = 1 << tests[i].pp_info_in.pp2_info.alignment_power;
             int32_t error;
 
             if (tests[i].add_tlvs[0].type)
@@ -578,7 +578,7 @@ int main()
             pp_info_clear(&tests[i].pp_info_in);
             if (!pp_hdr
                 || error != ERR_NULL
-                || (pow > 1 && pp_hdr_len % pow))
+                || (alignment > 1 && pp_hdr_len % alignment))
             {
                 printf("FAILED\n");
                 pp_info_clear(&pp_info_out);

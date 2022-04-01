@@ -89,7 +89,7 @@ typedef struct
      * In parsing:
      *      Ignored
      */
-    uint8_t        align_padding;
+    uint8_t        alignment_power;
     pp2_ssl_info_t pp2_ssl_info;
     tlv_array_t    tlv_array;
     /*
