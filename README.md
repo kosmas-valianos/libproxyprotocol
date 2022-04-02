@@ -1,14 +1,15 @@
 # libproxyprotocol
-An ANSI C library to **parse** and **create** [PROXY protocol](https://www.haproxy.org/download/2.6/doc/proxy-protocol.txt) v1 and v2 headers with support for **all TLVs**
-* Full coverage of the latest 2.6 specification in parsing and creating all the v2 TLVs, including the custom ones from AWS and Azure.
-* Easy access of the values of the extracted v2 TLVs though the API. In case the v2 TLV values are US-ASCII string names, they are given as proper NULL terminated strings for easy usage.
-* Easy way through the API to request a specific alignment when creating v2 PROXY protocol headers.
+An ANSI C library to **parse** and **create** [PROXY protocol](https://www.haproxy.org/download/2.6/doc/proxy-protocol.txt) v1 and v2 headers with support for **all TLVs** including the custom ones from AWS and Azure
+* Full coverage of the latest 2.6 specification.
+* Easy addition of any TLV through API functions when creating v2 PROXY protocol headers.
+* Easy access of the values of the extracted v2 TLVs though API functions. Moreover, in case the v2 TLV values are US-ASCII string names, they are given as proper NULL terminated strings for easy usage.
+* Easy way through the API to request a specific alignment, CRC32C checksum when creating v2 PROXY protocol headers.
 * Easy way through an API function to create health check v2 PROXY protocol headers.
 * Socket free logic. Does not hook, manipulate, assume any networking. It merely works on buffers.
 * Compilable with most compilers and usable at any platform as it is written in ANSI C.
 
 ## Installation
-The library should be compilable to any platform as it is written in ANSI C. It comes with a Makefile which can create the shared library `libproxyprotocol.so` which can then be linked to your application. Special care has been taken to make it work with Windows as well. In that case you have to compile it to a .dll/.lib yourself. In case of Windows remember that you have to link with the `ws2_32.lib`. An example of this is shown in tests.
+The library should be compilable to any platform as it is written in ANSI C. It comes with a Makefile which can create the shared library `libproxyprotocol.so` which can then be linked to your application. You can of course link statically as well using the .o directly. Special care has been taken to make it work with Windows as well. In that case you have to compile it to a .dll/.lib yourself. In case of Windows remember that you have to link with the `ws2_32.lib`. An example of this is shown in tests.
 
 ## API/Usage
 All the API details are in the proxy_protocol.h. The complete example for creating/parsing v1 and v2 PROXY protocol headers can be found at `examples/client_server.c`
