@@ -21,8 +21,12 @@
 #include <string.h>
 #ifdef _WIN32
     #include <ws2tcpip.h>
+    /* Caution: To be used only with fixed length arrays */
+    #define _sprintf(buffer, format, ...) sprintf_s(buffer, sizeof(buffer), format, __VA_ARGS__)
 #else
     #include <arpa/inet.h>
+    /* sprintf() as snprintf does not exist in ANSI C */
+    #define _sprintf(buffer, format, ...) sprintf(buffer, format, __VA_ARGS__)
 #endif
 
 #include "proxy_protocol.h"
@@ -763,8 +767,7 @@ static uint8_t *pp1_create_hdr(const pp_info_t *pp_info, uint16_t *pp1_hdr_len, 
         char dst_addr[39+1];
         memcpy(src_addr, pp_info->src_addr, sizeof(src_addr));
         memcpy(dst_addr, pp_info->dst_addr, sizeof(dst_addr));
-        /* sprintf() as snprintf does not exist in ANSI C */
-        *pp1_hdr_len = sprintf(block, "PROXY %s %s %s %hu %hu"CRLF, fam, src_addr, dst_addr, pp_info->src_port, pp_info->dst_port);
+        *pp1_hdr_len = _sprintf(block, "PROXY %s %s %s %hu %hu"CRLF, fam, src_addr, dst_addr, pp_info->src_port, pp_info->dst_port);
     }
     else
     {
