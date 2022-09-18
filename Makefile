@@ -18,7 +18,7 @@
 
 CFLAGS := -Wall -Wextra -Wshadow -Wimplicit-fallthrough=0 -ansi -fshort-enums -fpic
 
-all: build
+all: build tests example
 
 build: libs_dir libs/libproxyprotocol.so
 
