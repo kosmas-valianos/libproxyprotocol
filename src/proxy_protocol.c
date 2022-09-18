@@ -149,8 +149,8 @@ typedef struct
 #define PP2_SIG "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A"
 
 /* ANSI C makes us suffer as we cannot have value[0] */
-#define sizeof_pp2_tlv_t     (sizeof(pp2_tlv_t) - 1)
-#define sizeof_pp2_tlv_aws_t (sizeof(pp2_tlv_aws_t) - 1)
+#define sizeof_pp2_tlv_t     ((uint16_t) sizeof(pp2_tlv_t) - 1)
+#define sizeof_pp2_tlv_aws_t ((uint16_t) sizeof(pp2_tlv_aws_t) - 1)
 
 /****************************************************************/
 
