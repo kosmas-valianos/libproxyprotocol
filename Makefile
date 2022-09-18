@@ -37,6 +37,9 @@ tests: tests/test_libproxyprotocol
 tests/test_libproxyprotocol: tests/test.o libs/libproxyprotocol.so
 	$(CC) -Llibs/ ${CFLAGS} -o $@ $< -lproxyprotocol
 
+example: examples/client_server
+	LD_LIBRARY_PATH=libs/ $<
+
 examples/client_server: examples/client_server.o libs/libproxyprotocol.so
 	$(CC) -Llibs/ ${CFLAGS} -o $@ $< -lproxyprotocol
 
