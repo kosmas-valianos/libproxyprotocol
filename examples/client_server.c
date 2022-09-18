@@ -74,9 +74,10 @@ int main()
             }
         }
     };
+    uint16_t pp2_hdr_len;
     /* Add SSL TLVs */
     /* IMPORTANT: Always clear the pp_info to be passed in pp_create_hdr() because TLVs are allocated in heap. Otherwise memory will be leaked */
-    if (!pp_info_add_ssl(&pp_info_in_v2, "TLSv1.2", "ECDHE-RSA-AES128-GCM-SHA256", "SHA256", "RSA2048", "example.com", 11))
+    if (!pp_info_add_ssl(&pp_info_in_v2, "TLSv1.2", "ECDHE-RSA-AES128-GCM-SHA256", "SHA256", "RSA2048", (uint8_t*) "example.com", 11))
     {
         fprintf(stderr, "pp_info_add_ssl() failed\n");
         pp_info_clear(&pp_info_in_v2);
@@ -89,7 +90,7 @@ int main()
         pp_info_clear(&pp_info_in_v2);
         return EXIT_FAILURE;
     }
-    uint8_t *pp2_hdr = pp_create_hdr(2, &pp_info_in_v2, &pp1_hdr_len, &error);
+    uint8_t *pp2_hdr = pp_create_hdr(2, &pp_info_in_v2, &pp2_hdr_len, &error);
     pp_info_clear(&pp_info_in_v2);
     if (error != ERR_NULL)
     {
@@ -98,7 +99,7 @@ int main()
     }
 
     /* Parse a v2 PROXY protocol header */
-    rc = pp_parse_hdr(pp2_hdr, pp1_hdr_len, &pp_info_out);
+    rc = pp_parse_hdr(pp2_hdr, pp2_hdr_len, &pp_info_out);
     free(pp2_hdr);
     if (!rc)
     {
@@ -127,6 +128,7 @@ int main()
                "\tSSL CN: %.*s\n"
                "\t%s %s %hu %hu\n",
             rc, linkid,
+            /* In case CRC32c is wrong then rc < 0 => pp_strerror(rc) at previous block will print the error */
             pp_info_out.pp2_info.crc32c == 1 ? "verified" : "not present",
             pp_info_get_ssl_version(&pp_info_out, &length),
             pp_info_get_ssl_cipher(&pp_info_out, &length),

@@ -18,7 +18,7 @@
 
 CFLAGS := -Wall -Wextra -Wshadow -Wimplicit-fallthrough=0 -ansi -fshort-enums -fpic
 
-all: build
+all: build tests example
 
 build: libs_dir libs/libproxyprotocol.so
 
@@ -37,6 +37,13 @@ tests: tests/test_libproxyprotocol
 tests/test_libproxyprotocol: tests/test.o libs/libproxyprotocol.so
 	$(CC) -Llibs/ ${CFLAGS} -o $@ $< -lproxyprotocol
 
+example: examples/client_server
+	LD_LIBRARY_PATH=libs/ $<
+
+examples/client_server: examples/client_server.o libs/libproxyprotocol.so
+	$(CC) -Llibs/ ${CFLAGS} -o $@ $< -lproxyprotocol
+
 clean:
 	$(RM) src/*.o libs/libproxyprotocol.so
 	$(RM) tests/*.o tests/test_libproxyprotocol
+	$(RM) examples/*.o examples/client_server

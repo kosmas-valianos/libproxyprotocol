@@ -21,8 +21,12 @@
 #include <string.h>
 #ifdef _WIN32
     #include <ws2tcpip.h>
+    /* Caution: To be used only with fixed length arrays */
+    #define _sprintf(buffer, format, ...) sprintf_s(buffer, sizeof(buffer), format, __VA_ARGS__)
 #else
     #include <arpa/inet.h>
+    /* sprintf() as snprintf does not exist in ANSI C */
+    #define _sprintf(buffer, format, ...) sprintf(buffer, format, __VA_ARGS__)
 #endif
 
 #include "proxy_protocol.h"
@@ -149,8 +153,8 @@ typedef struct
 #define PP2_SIG "\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A"
 
 /* ANSI C makes us suffer as we cannot have value[0] */
-#define sizeof_pp2_tlv_t     (sizeof(pp2_tlv_t) - 1)
-#define sizeof_pp2_tlv_aws_t (sizeof(pp2_tlv_aws_t) - 1)
+#define sizeof_pp2_tlv_t     ((uint16_t) sizeof(pp2_tlv_t) - 1)
+#define sizeof_pp2_tlv_aws_t ((uint16_t) sizeof(pp2_tlv_aws_t) - 1)
 
 /****************************************************************/
 
@@ -347,7 +351,7 @@ uint8_t pp_info_add_netns(pp_info_t *pp_info, const char *netns)
 
 uint8_t pp_info_add_aws_vpce_id(pp_info_t *pp_info, const char *vpce_id)
 {
-    uint16_t length = (uint16_t) (sizeof_pp2_tlv_aws_t + strlen(vpce_id));
+    uint16_t length = sizeof_pp2_tlv_aws_t + (uint16_t) strlen(vpce_id);
     pp2_tlv_aws_t *pp2_tlv_aws = malloc(length);
     pp2_tlv_aws->type = PP2_SUBTYPE_AWS_VPCE_ID;
     memcpy(pp2_tlv_aws->value, vpce_id, strlen(vpce_id));
@@ -663,7 +667,7 @@ uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, int32_t
         {
             uint16_t pp2_hdr_len_padded = (*pp2_hdr_len / alignment + 1) * alignment;
             /* The NOOP TLV needs to be at least 3 bytes because a TLV can not be smaller than that */
-            if (pp2_hdr_len_padded - *pp2_hdr_len < 3)
+            if (pp2_hdr_len_padded - *pp2_hdr_len < sizeof_pp2_tlv_t)
             {
                 pp2_hdr_len_padded += alignment;
             }
@@ -763,8 +767,7 @@ static uint8_t *pp1_create_hdr(const pp_info_t *pp_info, uint16_t *pp1_hdr_len, 
         char dst_addr[39+1];
         memcpy(src_addr, pp_info->src_addr, sizeof(src_addr));
         memcpy(dst_addr, pp_info->dst_addr, sizeof(dst_addr));
-        /* sprintf() as snprintf does not exist in ANSI C */
-        *pp1_hdr_len = sprintf(block, "PROXY %s %s %s %hu %hu"CRLF, fam, src_addr, dst_addr, pp_info->src_port, pp_info->dst_port);
+        *pp1_hdr_len = _sprintf(block, "PROXY %s %s %s %hu %hu"CRLF, fam, src_addr, dst_addr, pp_info->src_port, pp_info->dst_port);
     }
     else
     {
@@ -932,11 +935,11 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
 
     /* TLVs */
     /* Any TLV vector must be at least 3 bytes */
-    while (tlv_vectors_len > 3)
+    while (tlv_vectors_len > sizeof_pp2_tlv_t)
     {
         pp2_tlv_t *pp2_tlv = (pp2_tlv_t*) buffer;
         uint16_t pp2_tlv_len = pp2_tlv->length_hi << 8 | pp2_tlv->length_lo;
-        uint16_t pp2_tlv_offset = 3 + pp2_tlv_len;
+        uint16_t pp2_tlv_offset = sizeof_pp2_tlv_t + pp2_tlv_len;
         if (pp2_tlv_offset > tlv_vectors_len)
         {
             return -ERR_PP2_TLV_LENGTH;
@@ -1030,7 +1033,7 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
                     return -ERR_PP2_TYPE_SSL;
                 }
 
-                pp2_sub_tlv_offset += 3 + pp2_sub_tlv_ssl_len;
+                pp2_sub_tlv_offset += sizeof_pp2_tlv_t + pp2_sub_tlv_ssl_len;
             }
             if (pp2_sub_tlv_offset > pp2_tlvs_ssl_len || (pp_info->pp2_info.pp2_ssl_info.ssl && !tlv_ssl_version_found))
             {
