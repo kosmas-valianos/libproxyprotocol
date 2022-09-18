@@ -663,7 +663,7 @@ uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, int32_t
         {
             uint16_t pp2_hdr_len_padded = (*pp2_hdr_len / alignment + 1) * alignment;
             /* The NOOP TLV needs to be at least 3 bytes because a TLV can not be smaller than that */
-            if (pp2_hdr_len_padded - *pp2_hdr_len < 3)
+            if (pp2_hdr_len_padded - *pp2_hdr_len < sizeof_pp2_tlv_t)
             {
                 pp2_hdr_len_padded += alignment;
             }
@@ -932,11 +932,11 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
 
     /* TLVs */
     /* Any TLV vector must be at least 3 bytes */
-    while (tlv_vectors_len > 3)
+    while (tlv_vectors_len > sizeof_pp2_tlv_t)
     {
         pp2_tlv_t *pp2_tlv = (pp2_tlv_t*) buffer;
         uint16_t pp2_tlv_len = pp2_tlv->length_hi << 8 | pp2_tlv->length_lo;
-        uint16_t pp2_tlv_offset = 3 + pp2_tlv_len;
+        uint16_t pp2_tlv_offset = sizeof_pp2_tlv_t + pp2_tlv_len;
         if (pp2_tlv_offset > tlv_vectors_len)
         {
             return -ERR_PP2_TLV_LENGTH;
@@ -1030,7 +1030,7 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
                     return -ERR_PP2_TYPE_SSL;
                 }
 
-                pp2_sub_tlv_offset += 3 + pp2_sub_tlv_ssl_len;
+                pp2_sub_tlv_offset += sizeof_pp2_tlv_t + pp2_sub_tlv_ssl_len;
             }
             if (pp2_sub_tlv_offset > pp2_tlvs_ssl_len || (pp_info->pp2_info.pp2_ssl_info.ssl && !tlv_ssl_version_found))
             {
