@@ -77,7 +77,7 @@ int main()
     uint16_t pp2_hdr_len;
     /* Add SSL TLVs */
     /* IMPORTANT: Always clear the pp_info to be passed in pp_create_hdr() because TLVs are allocated in heap. Otherwise memory will be leaked */
-    if (!pp_info_add_ssl(&pp_info_in_v2, "TLSv1.2", "ECDHE-RSA-AES128-GCM-SHA256", "SHA256", "RSA2048", "example.com", 11))
+    if (!pp_info_add_ssl(&pp_info_in_v2, "TLSv1.2", "ECDHE-RSA-AES128-GCM-SHA256", "SHA256", "RSA2048", (uint8_t*)"example.com", 11))
     {
         fprintf(stderr, "pp_info_add_ssl() failed\n");
         pp_info_clear(&pp_info_in_v2);
