@@ -347,7 +347,7 @@ uint8_t pp_info_add_netns(pp_info_t *pp_info, const char *netns)
 
 uint8_t pp_info_add_aws_vpce_id(pp_info_t *pp_info, const char *vpce_id)
 {
-    uint16_t length = (uint16_t) (sizeof_pp2_tlv_aws_t + strlen(vpce_id));
+    uint16_t length = sizeof_pp2_tlv_aws_t + (uint16_t) strlen(vpce_id);
     pp2_tlv_aws_t *pp2_tlv_aws = malloc(length);
     pp2_tlv_aws->type = PP2_SUBTYPE_AWS_VPCE_ID;
     memcpy(pp2_tlv_aws->value, vpce_id, strlen(vpce_id));
