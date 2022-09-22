@@ -99,7 +99,7 @@ if (!pp_info_add_azure_linkid(&pp_info_in_v2, 1234))
     pp_info_clear(&pp_info_in_v2);
     return EXIT_FAILURE;
 }
-uint8_t *pp2_hdr = pp_create_hdr(2, &pp_info_in_v2, &pp1_hdr_len, &error);
+uint8_t *pp2_hdr = pp_create_hdr(2, &pp_info_in_v2, &pp2_hdr_len, &error);
 pp_info_clear(&pp_info_in_v2);
 if (error != ERR_NULL)
 {
@@ -110,7 +110,7 @@ if (error != ERR_NULL)
 
 ### Parse a v2 PROXY protocol header
 ```
-rc = pp_parse_hdr(pp2_hdr, pp1_hdr_len, &pp_info_out);
+rc = pp_parse_hdr(pp2_hdr, pp2_hdr_len, &pp_info_out);
 free(pp2_hdr);
 if (!rc)
 {
@@ -139,6 +139,7 @@ else
             "\tSSL CN: %.*s\n"
             "%s %s %hu %hu\n",
         rc, linkid,
+        /* In case CRC32c is wrong then rc < 0 => pp_strerror(rc) at previous block will print the error */
         pp_info_out.pp2_info.crc32c == 1 ? "verified" : "not present",
         pp_info_get_ssl_version(&pp_info_out, &length),
         pp_info_get_ssl_cipher(&pp_info_out, &length),
