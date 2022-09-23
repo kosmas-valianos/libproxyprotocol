@@ -9,7 +9,7 @@ An ANSI C library to **parse** and **create** [PROXY protocol](https://www.hapro
 * Compilable with most compilers and usable at any platform as it is written in ANSI C.
 
 ## Installation
-The library should be compilable to any platform as it is written in ANSI C. It comes with a Makefile which can create the shared library `libproxyprotocol.so` which can then be linked to your application. You can of course link statically as well using the .o directly. Special care has been taken to make it work with Windows as well. In that case you have to compile it to a .dll/.lib yourself. In case of Windows remember that you have to link with the `ws2_32.lib`. An example of this is shown in tests.
+The library should be compilable to any platform as it is written in ANSI C. It comes with a Makefile which can create the shared library `libproxyprotocol.so` which can then be linked to your application. Dynamic linking is the suggested way as it applies at all cases! You can link statically using the `.o` directly but keep in mind that in case of a commercial product you **must** use the shared library `.so`due to the LGPL restrictions. Special care has been taken to make it work with Windows as well. In that case you have to compile it to a .dll/.lib yourself. In case of Windows remember that you have to link with the `ws2_32.lib`. An example of this is shown in tests.
 
 ## API/Usage
 All the API details are in the proxy_protocol.h. The complete example for creating/parsing v1 and v2 PROXY protocol headers can be found at `examples/client_server.c`
