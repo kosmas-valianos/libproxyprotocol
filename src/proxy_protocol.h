@@ -191,8 +191,8 @@ uint8_t *pp2_create_healthcheck_hdr(uint16_t *pp2_hdr_len, int32_t *error);
 
 /* Creates a PROXY protocol header considering the information inside the pp_info.
  *
- * version:     0 Create a v1 PROXY protocol header
- *              1 Create a v2 PROXY protocol header
+ * version:     1 Create a v1 PROXY protocol header
+ *              2 Create a v2 PROXY protocol header
  * pp_info      Pointer to a filled pp_info_t structure whose information will be used for the creation of the PROXY protocol header
  * pp_hdr_len   Pointer to a uint16_t where the length of the create PROXY protocol header will be set
  * error        Pointer to a int32_t where the error value will be set
