@@ -1,3 +1,4 @@
 *.o
 libs/libproxyprotocol.so
 tests/test_libproxyprotocol
+examples/client_server
