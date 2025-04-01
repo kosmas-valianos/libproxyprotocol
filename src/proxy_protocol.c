@@ -589,7 +589,7 @@ uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, int32_t
         proxy_hdr_v2.ver_cmd = '\x20';
         if (!pp_info->pp2_info.local)
         {
-            *error = ERR_PP2_CMD;
+            *error = -ERR_PP2_CMD;
             return NULL;
         }
     }
@@ -598,12 +598,12 @@ uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, int32_t
         proxy_addr_len = 12;
         if (inet_pton(AF_INET, pp_info->src_addr, &proxy_addr.ipv4_addr.src_addr) != 1)
         {
-            *error = ERR_PP2_IPV4_SRC_IP;
+            *error = -ERR_PP2_IPV4_SRC_IP;
             return NULL;
         }
         if (inet_pton(AF_INET, pp_info->dst_addr, &proxy_addr.ipv4_addr.dst_addr) != 1)
         {
-            *error = ERR_PP2_IPV4_DST_IP;
+            *error = -ERR_PP2_IPV4_DST_IP;
             return NULL;
         }
         proxy_addr.ipv4_addr.src_port = htons(pp_info->src_port);
@@ -614,12 +614,12 @@ uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, int32_t
         proxy_addr_len = 36;
         if (inet_pton(AF_INET6, pp_info->src_addr, &proxy_addr.ipv6_addr.src_addr) != 1)
         {
-            *error = ERR_PP2_IPV6_SRC_IP;
+            *error = -ERR_PP2_IPV6_SRC_IP;
             return NULL;
         }
         if (inet_pton(AF_INET6, pp_info->dst_addr, &proxy_addr.ipv6_addr.dst_addr) != 1)
         {
-            *error = ERR_PP2_IPV6_DST_IP;
+            *error = -ERR_PP2_IPV6_DST_IP;
             return NULL;
         }
         proxy_addr.ipv6_addr.src_port = htons(pp_info->src_port);
@@ -633,13 +633,13 @@ uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, int32_t
     }
     else
     {
-        *error = ERR_PP2_ADDR_FAMILY;
+        *error = -ERR_PP2_ADDR_FAMILY;
         return NULL;
     }
 
     if (pp_info->transport_protocol > TRANSPORT_PROTOCOL_DGRAM)
     {
-        *error = ERR_PP2_TRANSPORT_PROTOCOL;
+        *error = -ERR_PP2_TRANSPORT_PROTOCOL;
         return NULL;
     }
 
@@ -683,7 +683,7 @@ uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, int32_t
     uint8_t *pp2_hdr = malloc(*pp2_hdr_len);
     if (!pp2_hdr)
     {
-        *error = ERR_HEAP_ALLOC;
+        *error = -ERR_HEAP_ALLOC;
         return NULL;
     }
     uint16_t index = 0;
@@ -739,7 +739,7 @@ static uint8_t *pp1_create_hdr(const pp_info_t *pp_info, uint16_t *pp1_hdr_len, 
 {
     if (pp_info->transport_protocol != TRANSPORT_PROTOCOL_UNSPEC && pp_info->transport_protocol != TRANSPORT_PROTOCOL_STREAM)
     {
-        *error = ERR_PP1_TRANSPORT_FAMILY;
+        *error = -ERR_PP1_TRANSPORT_FAMILY;
         return NULL;
     }
 
@@ -753,15 +753,33 @@ static uint8_t *pp1_create_hdr(const pp_info_t *pp_info, uint16_t *pp1_hdr_len, 
     else if (pp_info->address_family == ADDR_FAMILY_INET || pp_info->address_family == ADDR_FAMILY_INET6)
     {
         const char *fam = pp_info->address_family == ADDR_FAMILY_INET ? "TCP4" : "TCP6";
-        if (strlen(pp_info->src_addr) > 39)
+        if (pp_info->address_family == ADDR_FAMILY_INET)
         {
-            *error = ERR_PP1_IPV4_SRC_IP;
-            return NULL;
+            struct in_addr in;
+            if (inet_pton(AF_INET, pp_info->src_addr, &in) != 1)
+            {
+                *error = -ERR_PP1_IPV4_SRC_IP;
+                return NULL;
+            }
+            if (inet_pton(AF_INET, pp_info->dst_addr, &in) != 1)
+            {
+                *error = -ERR_PP1_IPV4_DST_IP;
+                return NULL;
+            }
         }
-        if (strlen(pp_info->dst_addr) > 39)
+        else if (pp_info->address_family == ADDR_FAMILY_INET6)
         {
-            *error = ERR_PP1_IPV4_DST_IP;
-            return NULL;
+            struct in6_addr in6;
+            if (inet_pton(AF_INET6, pp_info->src_addr, &in6) != 1)
+            {
+                *error = -ERR_PP1_IPV6_SRC_IP;
+                return NULL;
+            }
+            if (inet_pton(AF_INET6, pp_info->dst_addr, &in6) != 1)
+            {
+                *error = -ERR_PP1_IPV6_DST_IP;
+                return NULL;
+            }
         }
         char src_addr[39+1];
         char dst_addr[39+1];
@@ -771,7 +789,7 @@ static uint8_t *pp1_create_hdr(const pp_info_t *pp_info, uint16_t *pp1_hdr_len, 
     }
     else
     {
-        *error = ERR_PP1_TRANSPORT_FAMILY;
+        *error = -ERR_PP1_TRANSPORT_FAMILY;
         return NULL;
     }
     
@@ -779,7 +797,7 @@ static uint8_t *pp1_create_hdr(const pp_info_t *pp_info, uint16_t *pp1_hdr_len, 
     uint8_t *pp1_hdr = malloc(*pp1_hdr_len);
     if (!pp1_hdr)
     {
-        *error = ERR_HEAP_ALLOC;
+        *error = -ERR_HEAP_ALLOC;
         return NULL;
     }
     memcpy(pp1_hdr, block, *pp1_hdr_len);
@@ -799,7 +817,7 @@ uint8_t *pp_create_hdr(uint8_t version, const pp_info_t *pp_info, uint16_t *pp_h
     }
     else
     {
-        *error = ERR_PP_VERSION;
+        *error = -ERR_PP_VERSION;
         return NULL;
     }
 }
