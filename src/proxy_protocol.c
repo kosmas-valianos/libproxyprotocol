@@ -753,15 +753,33 @@ static uint8_t *pp1_create_hdr(const pp_info_t *pp_info, uint16_t *pp1_hdr_len, 
     else if (pp_info->address_family == ADDR_FAMILY_INET || pp_info->address_family == ADDR_FAMILY_INET6)
     {
         const char *fam = pp_info->address_family == ADDR_FAMILY_INET ? "TCP4" : "TCP6";
-        if (strlen(pp_info->src_addr) > 39)
+        if (pp_info->address_family == ADDR_FAMILY_INET)
         {
-            *error = -ERR_PP1_IPV4_SRC_IP;
-            return NULL;
+            struct in_addr in;
+            if (inet_pton(AF_INET, pp_info->src_addr, &in) != 1)
+            {
+                *error = -ERR_PP1_IPV4_SRC_IP;
+                return NULL;
+            }
+            if (inet_pton(AF_INET, pp_info->dst_addr, &in) != 1)
+            {
+                *error = -ERR_PP1_IPV4_DST_IP;
+                return NULL;
+            }
         }
-        if (strlen(pp_info->dst_addr) > 39)
+        else if (pp_info->address_family == ADDR_FAMILY_INET6)
         {
-            *error = -ERR_PP1_IPV4_DST_IP;
-            return NULL;
+            struct in6_addr in6;
+            if (inet_pton(AF_INET6, pp_info->src_addr, &in6) != 1)
+            {
+                *error = -ERR_PP1_IPV6_SRC_IP;
+                return NULL;
+            }
+            if (inet_pton(AF_INET6, pp_info->dst_addr, &in6) != 1)
+            {
+                *error = -ERR_PP1_IPV6_DST_IP;
+                return NULL;
+            }
         }
         char src_addr[39+1];
         char dst_addr[39+1];
