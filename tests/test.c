@@ -70,6 +70,7 @@ typedef struct
     pp_info_t   pp_info_in;
     uint8_t    *raw_bytes_in;
     uint32_t    raw_bytes_in_length;
+    int32_t     error_expected; /* error parameter of pp_create_hdr() */
     int32_t     rc_expected;
     pp_info_t   pp_info_out_expected;
     test_tlv_t  add_tlvs[10];
@@ -554,6 +555,132 @@ int main()
                 .pp2_info.local = 1
             },
         },
+        {
+            .name = "v1 PROXY protocol header: -ERR_PP1_TRANSPORT_FAMILY",
+            .version = 1,
+            .pp_info_in = {
+                .transport_protocol = 3,
+            },
+            .error_expected = -ERR_PP1_TRANSPORT_FAMILY,
+        },
+        {
+            .name = "v1 PROXY protocol header: -ERR_PP1_TRANSPORT_FAMILY",
+            .version = 1,
+            .pp_info_in = {
+                .address_family = 3,
+            },
+            .error_expected = -ERR_PP1_TRANSPORT_FAMILY,
+        },
+        {
+            .name = "v1 PROXY protocol header: -ERR_PP1_IPV4_SRC_IP",
+            .version = 1,
+            .pp_info_in = {
+                .address_family = ADDR_FAMILY_INET,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
+                .src_addr = "255.255.255.255.255",
+            },
+            .error_expected = -ERR_PP1_IPV4_SRC_IP,
+        },
+        {
+            .name = "v1 PROXY protocol header: -ERR_PP1_IPV4_DST_IP",
+            .version = 1,
+            .pp_info_in = {
+                .address_family = ADDR_FAMILY_INET,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
+                .src_addr = "255.255.255.255",
+                .dst_addr = "255.255.255.255.255",
+            },
+            .error_expected = -ERR_PP1_IPV4_DST_IP,
+        },
+        {
+            .name = "v1 PROXY protocol header: -ERR_PP1_IPV6_SRC_IP",
+            .version = 1,
+            .pp_info_in = {
+                .address_family = ADDR_FAMILY_INET6,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
+                .src_addr = "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
+            },
+            .error_expected = -ERR_PP1_IPV6_SRC_IP,
+        },
+        {
+            .name = "v1 PROXY protocol header: -ERR_PP1_IPV6_DST_IP",
+            .version = 1,
+            .pp_info_in = {
+                .address_family = ADDR_FAMILY_INET6,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
+                .src_addr = "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
+                .dst_addr = "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
+            },
+            .error_expected = -ERR_PP1_IPV6_DST_IP,
+        },
+        {
+            .name = "v2 PROXY protocol header: -ERR_PP2_CMD",
+            .version = 2,
+            .pp_info_in = {
+                .pp2_info.local = 0,
+            },
+            .error_expected = -ERR_PP2_CMD,
+        },
+        {
+            .name = "v2 PROXY protocol header: -ERR_PP2_ADDR_FAMILY",
+            .version = 2,
+            .pp_info_in = {
+                .address_family = 4,
+            },
+            .error_expected = -ERR_PP2_ADDR_FAMILY,
+        },
+        {
+            .name = "v2 PROXY protocol header: -ERR_PP2_TRANSPORT_PROTOCOL",
+            .version = 2,
+            .pp_info_in = {
+                .address_family = ADDR_FAMILY_UNSPEC,
+                .pp2_info.local = 1,
+                .transport_protocol = 4,
+            },
+            .error_expected = -ERR_PP2_TRANSPORT_PROTOCOL,
+        },
+        {
+            .name = "v2 PROXY protocol header: -ERR_PP2_IPV4_SRC_IP",
+            .version = 2,
+            .pp_info_in = {
+                .address_family = ADDR_FAMILY_INET,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
+                .src_addr = "255.255.255.255.255",
+            },
+            .error_expected = -ERR_PP2_IPV4_SRC_IP,
+        },
+        {
+            .name = "v2 PROXY protocol header: -ERR_PP2_IPV4_DST_IP",
+            .version = 2,
+            .pp_info_in = {
+                .address_family = ADDR_FAMILY_INET,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
+                .src_addr = "255.255.255.255",
+                .dst_addr = "255.255.255.255.255",
+            },
+            .error_expected = -ERR_PP2_IPV4_DST_IP,
+        },
+        {
+            .name = "v2 PROXY protocol header: -ERR_PP2_IPV6_SRC_IP",
+            .version = 2,
+            .pp_info_in = {
+                .address_family = ADDR_FAMILY_INET6,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
+                .src_addr = "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
+            },
+            .error_expected = -ERR_PP2_IPV6_SRC_IP,
+        },
+        {
+            .name = "v2 PROXY protocol header: -ERR_PP2_IPV6_DST_IP",
+            .version = 2,
+            .pp_info_in = {
+                .address_family = ADDR_FAMILY_INET6,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
+                .src_addr = "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
+                .dst_addr = "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
+            },
+            .error_expected = -ERR_PP2_IPV6_DST_IP,
+        },
     };
 
     /* Run tests */
@@ -562,16 +689,16 @@ int main()
     {
         printf("Running test: %s...", tests[i].name);
         pp_info_t pp_info_out;
-        int32_t rc;
+        int32_t pp_parse_hdr_rc = 0;
         if (tests[i].raw_bytes_in)
         {
-            rc = pp_parse_hdr(tests[i].raw_bytes_in, tests[i].raw_bytes_in_length, &pp_info_out);
+            pp_parse_hdr_rc = pp_parse_hdr(tests[i].raw_bytes_in, tests[i].raw_bytes_in_length, &pp_info_out);
         }
         else
         {
-            uint16_t pp_hdr_len;
+            uint16_t pp_hdr_len = 0;
             uint16_t alignment = 1 << tests[i].pp_info_in.pp2_info.alignment_power;
-            int32_t error;
+            int32_t error = ERR_NULL;
 
             if (tests[i].add_tlvs[0].type)
             {
@@ -594,20 +721,33 @@ int main()
                 pp_hdr = pp_create_hdr(tests[i].version, &tests[i].pp_info_in, &pp_hdr_len, &error);
                 pp_info_clear(&tests[i].pp_info_in);
             }
-            if (!pp_hdr
-                || error != ERR_NULL
-                || (alignment > 1 && pp_hdr_len % alignment))
+            if (tests[i].error_expected == ERR_NULL)
             {
-                printf("FAILED\n");
-                pp_info_clear(&pp_info_out);
-                return EXIT_FAILURE;
+                if (!pp_hdr
+                    || error != ERR_NULL
+                    || (alignment > 1 && pp_hdr_len % alignment))
+                {
+                    printf("FAILED\n");
+                    pp_info_clear(&pp_info_out);
+                    return EXIT_FAILURE;
+                }
+                tests[i].rc_expected = pp_hdr_len;
+                pp_parse_hdr_rc = pp_parse_hdr(pp_hdr, pp_hdr_len, &pp_info_out);
             }
-            tests[i].rc_expected = pp_hdr_len;
-            rc = pp_parse_hdr(pp_hdr, pp_hdr_len, &pp_info_out);
+            else
+            {
+                if (pp_hdr || error != tests[i].error_expected)
+                {
+                    printf("FAILED\n");
+                    pp_info_clear(&pp_info_out);
+                    return EXIT_FAILURE;
+                }
+            }
             free(pp_hdr);
         }
 
-        if (rc != tests[i].rc_expected || !pp_info_equal(&pp_info_out, &tests[i].pp_info_out_expected) || !pp_verify_tlvs(&pp_info_out, &tests[i].expected_tlvs))
+        if (pp_parse_hdr_rc != tests[i].rc_expected
+            || (pp_parse_hdr_rc && (!pp_info_equal(&pp_info_out, &tests[i].pp_info_out_expected) || !pp_verify_tlvs(&pp_info_out, &tests[i].expected_tlvs))))
         {
             printf("FAILED\n");
             pp_info_clear(&pp_info_out);
