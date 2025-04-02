@@ -688,7 +688,7 @@ int main()
     for (i = 0; i < NUM_ELEMS(tests); i++)
     {
         printf("Running test: %s...", tests[i].name);
-        pp_info_t pp_info_out;
+        pp_info_t pp_info_out = {0};
         int32_t pp_parse_hdr_rc = 0;
         if (tests[i].raw_bytes_in)
         {
