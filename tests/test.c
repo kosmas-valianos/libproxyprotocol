@@ -59,22 +59,22 @@ typedef struct
     uint8_t  type;
     uint8_t  subtype;
     uint16_t value_len;
-    uint8_t *value;
+    const uint8_t *value;
 } test_tlv_t;
 
 typedef struct
 {
-    const char *name;
-    uint8_t     version;
-    uint8_t     create_healthcheck;
-    pp_info_t   pp_info_in;
-    uint8_t    *raw_bytes_in;
-    uint32_t    raw_bytes_in_length;
-    int32_t     error_expected; /* error parameter of pp_create_hdr() */
-    int32_t     rc_expected;
-    pp_info_t   pp_info_out_expected;
-    test_tlv_t  add_tlvs[10];
-    test_tlv_t  expected_tlvs[10];
+    const char    *name;
+    uint8_t        version;
+    uint8_t        create_healthcheck;
+    pp_info_t      pp_info_in;
+    const uint8_t *raw_bytes_in;
+    uint32_t       raw_bytes_in_length;
+    int32_t        error_expected; /* error parameter of pp_create_hdr() */
+    int32_t        rc_expected;
+    pp_info_t      pp_info_out_expected;
+    test_tlv_t     add_tlvs[10];
+    test_tlv_t     expected_tlvs[10];
 } test_t;
 
 uint8_t pp2_hdr_vpce[] = {
@@ -138,11 +138,11 @@ static uint8_t pp_add_tlvs(pp_info_t *pp_info, const test_tlv_t (*add_tlvs)[10])
     uint8_t rc = 1;
     uint32_t azure_linkid = 0;
     uint16_t ssl_cn_len = 0;
-    uint8_t *ssl_cn = NULL;
-    char *ssl_version = NULL;
-    char *ssl_cipher = NULL;
-    char *ssl_sig_alg = NULL;
-    char *ssl_key_alg = NULL;
+    const uint8_t *ssl_cn = NULL;
+    const char *ssl_version = NULL;
+    const char *ssl_cipher = NULL;
+    const char *ssl_sig_alg = NULL;
+    const char *ssl_key_alg = NULL;
     for (i = 0; i < NUM_ELEMS(*add_tlvs) && rc == 1; i++)
     {
         const test_tlv_t *test_tlv = &(*add_tlvs)[i];
@@ -160,29 +160,29 @@ static uint8_t pp_add_tlvs(pp_info_t *pp_info, const test_tlv_t (*add_tlvs)[10])
                 rc = pp_info_add_unique_id(pp_info, test_tlv->value_len, test_tlv->value);
                 break;
             case PP2_SUBTYPE_SSL_VERSION:
-                ssl_version = (char*) test_tlv->value;
+                ssl_version = (const char*) test_tlv->value;
                 break;
             case PP2_SUBTYPE_SSL_CN:
                 ssl_cn_len = test_tlv->value_len;
                 ssl_cn = test_tlv->value;
                 break;
             case PP2_SUBTYPE_SSL_CIPHER:
-                ssl_cipher = (char*) test_tlv->value;
+                ssl_cipher = (const char*) test_tlv->value;
                 break;
             case PP2_SUBTYPE_SSL_SIG_ALG:
-                ssl_sig_alg = (char*) test_tlv->value;
+                ssl_sig_alg = (const char*) test_tlv->value;
                 break;
             case PP2_SUBTYPE_SSL_KEY_ALG:
-                ssl_key_alg = (char*) test_tlv->value;
+                ssl_key_alg = (const char*) test_tlv->value;
                 break;
             case PP2_TYPE_NETNS:
-                rc = pp_info_add_netns(pp_info, (char*) test_tlv->value);
+                rc = pp_info_add_netns(pp_info, (const char*) test_tlv->value);
                 break;
             case PP2_TYPE_AWS:
-                rc = pp_info_add_aws_vpce_id(pp_info, (char*) test_tlv->value);
+                rc = pp_info_add_aws_vpce_id(pp_info, (const char*) test_tlv->value);
                 break;
             case PP2_TYPE_AZURE:
-                memcpy(&azure_linkid, (uint32_t*) test_tlv->value, sizeof(uint32_t));
+                memcpy(&azure_linkid, (const uint32_t*) test_tlv->value, sizeof(uint32_t));
                 rc = pp_info_add_azure_linkid(pp_info, azure_linkid);
                 break;
             default:
@@ -307,21 +307,21 @@ static uint8_t pp_info_equal(const pp_info_t *pp_info_a, const pp_info_t *pp_inf
     return 1;
 }
 
-int main()
+int main(void)
 {
     /* Define tests */
     test_t tests[] = {
         {
             .name = "v1 PROXY protocol header: UNKNOWN - short",
-            .raw_bytes_in = (uint8_t*) "PROXY UNKNOWN\r\n",
-            .raw_bytes_in_length = strlen((char*) tests[0].raw_bytes_in),
-            .rc_expected = strlen((char*) tests[0].raw_bytes_in),
+            .raw_bytes_in = (const uint8_t*) "PROXY UNKNOWN\r\n",
+            .raw_bytes_in_length = strlen((const char*) tests[0].raw_bytes_in),
+            .rc_expected = strlen((const char*) tests[0].raw_bytes_in),
         },
         {
             .name = "v1 PROXY protocol header: UNKNOWN - full",
-            .raw_bytes_in = (uint8_t*) "PROXY UNKNOWN ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff 65535 65535\r\n",
-            .raw_bytes_in_length = strlen((char*) tests[1].raw_bytes_in),
-            .rc_expected = strlen((char*) tests[1].raw_bytes_in),
+            .raw_bytes_in = (const uint8_t*) "PROXY UNKNOWN ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff 65535 65535\r\n",
+            .raw_bytes_in_length = strlen((const char*) tests[1].raw_bytes_in),
+            .rc_expected = strlen((const char*) tests[1].raw_bytes_in),
         },
         {
             .name = "v2 PROXY protocol header: PROXY, TCP over IPv4. TLVs: PP2_TYPE_CRC32C, PP2_TYPE_AWS(PP2_SUBTYPE_AWS_VPCE_ID)",
@@ -341,13 +341,13 @@ int main()
                 {
                     .type = PP2_TYPE_CRC32C,
                     .value_len = 4,
-                    .value = (uint8_t*) "\xe5\x18\x86\xf8"
+                    .value = (const uint8_t*) "\xe5\x18\x86\xf8"
                 },
                 {
                     .type = PP2_TYPE_AWS,
                     .subtype = PP2_SUBTYPE_AWS_VPCE_ID,
                     .value_len = 23,
-                    .value = (uint8_t*) "vpce-23d8ezjk38bchilm4"
+                    .value = (const uint8_t*) "vpce-23d8ezjk38bchilm4"
                 },
             },
         },
@@ -451,38 +451,38 @@ int main()
                 {
                 .type = PP2_SUBTYPE_SSL_VERSION,
                     .value_len = 8,
-                    .value = (uint8_t*)"TLSv1.2"
+                    .value = (const uint8_t*) "TLSv1.2"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_CN,
                     .value_len = 18,
-                    .value = (uint8_t*)"proxy-protocol.com"
+                    .value = (const uint8_t*) "proxy-protocol.com"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_CIPHER,
                     .value_len = 28,
-                    .value = (uint8_t*)"ECDHE-RSA-AES128-GCM-SHA256"
+                    .value = (const uint8_t*) "ECDHE-RSA-AES128-GCM-SHA256"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_SIG_ALG,
                     .value_len = 7,
-                    .value = (uint8_t*)"SHA256"
+                    .value = (const uint8_t*) "SHA256"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_KEY_ALG,
                     .value_len = 8,
-                    .value = (uint8_t*)"RSA2048"
+                    .value = (const uint8_t*) "RSA2048"
                 },
                 {
                     .type = PP2_TYPE_AWS,
                     .subtype = PP2_SUBTYPE_AWS_VPCE_ID,
                     .value_len = 24,
-                    .value = (uint8_t*)"vpce-24d8ezjk38bchilm4m"
+                    .value = (const uint8_t*) "vpce-24d8ezjk38bchilm4m"
                 },
                 {
                     .type = PP2_TYPE_CRC32C,
                     .value_len = 4,
-                    .value = (uint8_t*)"\x43\x84\x86\x4e"
+                    .value = (const uint8_t*) "\x43\x84\x86\x4e"
                 },
             },
             .pp_info_out_expected = tests[9].pp_info_in,
@@ -513,27 +513,27 @@ int main()
                 {
                     .type = PP2_SUBTYPE_SSL_VERSION,
                     .value_len = 8,
-                    .value = (uint8_t*)"TLSv1.2"
+                    .value = (const uint8_t*) "TLSv1.2"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_CN,
                     .value_len = 11,
-                    .value = (uint8_t*)"example.com"
+                    .value = (const uint8_t*) "example.com"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_CIPHER,
                     .value_len = 28,
-                    .value = (uint8_t*)"ECDHE-RSA-AES128-GCM-SHA256"
+                    .value = (const uint8_t*) "ECDHE-RSA-AES128-GCM-SHA256"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_SIG_ALG,
                     .value_len = 7,
-                    .value = (uint8_t*)"SHA256"
+                    .value = (const uint8_t*) "SHA256"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_KEY_ALG,
                     .value_len = 8,
-                    .value = (uint8_t*)"RSA2048"
+                    .value = (const uint8_t*) "RSA2048"
                 },
             },
         },
@@ -687,18 +687,27 @@ int main()
     uint32_t i;
     for (i = 0; i < NUM_ELEMS(tests); i++)
     {
-        printf("Running test: %s...", tests[i].name);
-        pp_info_t pp_info_out = {0};
+        pp_info_t pp_info_out = { 0 };
         int32_t pp_parse_hdr_rc = 0;
+        printf("Running test: %s...", tests[i].name);
         if (tests[i].raw_bytes_in)
         {
-            pp_parse_hdr_rc = pp_parse_hdr(tests[i].raw_bytes_in, tests[i].raw_bytes_in_length, &pp_info_out);
+            uint8_t *buffer = malloc(tests[i].raw_bytes_in_length);
+            if (!buffer)
+            {
+                printf("FAILED\n");
+                pp_info_clear(&pp_info_out);
+                return EXIT_FAILURE;
+            }
+            memcpy(buffer, tests[i].raw_bytes_in, tests[i].raw_bytes_in_length);
+            pp_parse_hdr_rc = pp_parse_hdr(buffer, tests[i].raw_bytes_in_length, &pp_info_out);
         }
         else
         {
             uint16_t pp_hdr_len = 0;
             uint16_t alignment = 1 << tests[i].pp_info_in.pp2_info.alignment_power;
             int32_t error = ERR_NULL;
+            uint8_t *pp_hdr = NULL;
 
             if (tests[i].add_tlvs[0].type)
             {
@@ -711,7 +720,6 @@ int main()
                 }
             }
 
-            uint8_t *pp_hdr = NULL;
             if (tests[i].create_healthcheck)
             {
                 pp_hdr = pp2_create_healthcheck_hdr(&pp_hdr_len, &error);
