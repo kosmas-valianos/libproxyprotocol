@@ -1170,7 +1170,7 @@ static int32_t pp1_parse_hdr(const uint8_t *buffer, uint32_t buffer_length, pp_i
     }
     ptr += 5;
 
-    /* Exactlychar *dst_address_end one space */
+    /* Exactly one space */
     if (*ptr != '\x20')
     {
         return -ERR_PP1_SPACE;
