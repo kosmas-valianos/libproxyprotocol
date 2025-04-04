@@ -10,20 +10,39 @@
 
 #include "../src/proxy_protocol.h"
 
-int main()
+int main(void)
 {
-    /* Create a v1 PROXY protocol header */
+    int32_t error = ERR_NULL;
+    int32_t rc;
+
     pp_info_t pp_info_in_v1 = {
-        .address_family = ADDR_FAMILY_INET,
-        .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
-        .src_addr = "172.22.32.1",
-        .dst_addr = "172.22.33.1",
-        .src_port = 4040,
-        .dst_port = 443
+        ADDR_FAMILY_INET,
+        TRANSPORT_PROTOCOL_STREAM,
+        "172.22.32.1",
+        "172.22.33.1",
+        4040,
+        443,
+        { 0 }
     };
-    uint16_t pp1_hdr_len;
-    int32_t error;
-    uint8_t *pp1_hdr = pp_create_hdr(1, &pp_info_in_v1, &pp1_hdr_len, &error);
+    uint8_t *pp1_hdr = NULL;
+    uint16_t pp1_hdr_len = 0;
+
+    pp_info_t pp_info_in_v2 = {
+        ADDR_FAMILY_INET,
+        TRANSPORT_PROTOCOL_STREAM,
+        "192.168.10.100",
+        "192.168.11.90",
+        42332,
+        8080,
+        { 0 }
+    };
+    uint8_t *pp2_hdr = NULL;
+    uint16_t pp2_hdr_len = 0;
+
+    pp_info_t pp_info_out = { 0 };
+
+    /* Create a v1 PROXY protocol header */
+    pp1_hdr = pp_create_hdr(1, &pp_info_in_v1, &pp1_hdr_len, &error);
     /* Clear the pp_info passed in pp_create_hdr(). Not really needed for v1 but good to do out of principle */
     pp_info_clear(&pp_info_in_v1);
     if (error != ERR_NULL)
@@ -33,8 +52,7 @@ int main()
     }
 
     /* Parse a v1 PROXY protocol header */
-    pp_info_t pp_info_out;
-    int32_t rc = pp_parse_hdr(pp1_hdr, pp1_hdr_len, &pp_info_out);
+    rc = pp_parse_hdr(pp1_hdr, pp1_hdr_len, &pp_info_out);
     free(pp1_hdr);
     if (!rc)
     {
@@ -57,27 +75,16 @@ int main()
     pp_info_clear(&pp_info_out);
 
     /* Create a v2 PROXY protocol header with some TLVs */
-    pp_info_t pp_info_in_v2 = {
-        .address_family = ADDR_FAMILY_INET,
-        .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
-        .src_addr = "192.168.10.100",
-        .dst_addr = "192.168.11.90",
-        .src_port = 42332,
-        .dst_port = 8080,
-        .pp2_info = {
-            .crc32c = 1,        /* Add crc32c checksum */
-            .pp2_ssl_info = {   /* Add SSL information */
-                .ssl = 1,
-                .cert_in_connection = 1,
-                .cert_in_session = 1,
-                .cert_verified = 1,
-            }
-        }
-    };
-    uint16_t pp2_hdr_len;
+    /* Add crc32c checksum */
+    pp_info_in_v2.pp2_info.crc32c = 1;
+    /* Add SSL information */
+    pp_info_in_v2.pp2_info.pp2_ssl_info.ssl = 1;
+    pp_info_in_v2.pp2_info.pp2_ssl_info.cert_in_connection = 1;
+    pp_info_in_v2.pp2_info.pp2_ssl_info.cert_in_session = 1;
+    pp_info_in_v2.pp2_info.pp2_ssl_info.cert_verified = 1;
     /* Add SSL TLVs */
     /* IMPORTANT: Always clear the pp_info to be passed in pp_create_hdr() because TLVs are allocated in heap. Otherwise memory will be leaked */
-    if (!pp_info_add_ssl(&pp_info_in_v2, "TLSv1.2", "ECDHE-RSA-AES128-GCM-SHA256", "SHA256", "RSA2048", (uint8_t*) "example.com", 11))
+    if (!pp_info_add_ssl(&pp_info_in_v2, "TLSv1.2", "ECDHE-RSA-AES128-GCM-SHA256", "SHA256", "RSA2048", (const uint8_t*) "example.com", 11))
     {
         fprintf(stderr, "pp_info_add_ssl() failed\n");
         pp_info_clear(&pp_info_in_v2);
@@ -90,7 +97,7 @@ int main()
         pp_info_clear(&pp_info_in_v2);
         return EXIT_FAILURE;
     }
-    uint8_t *pp2_hdr = pp_create_hdr(2, &pp_info_in_v2, &pp2_hdr_len, &error);
+    pp2_hdr = pp_create_hdr(2, &pp_info_in_v2, &pp2_hdr_len, &error);
     pp_info_clear(&pp_info_in_v2);
     if (error != ERR_NULL)
     {
@@ -114,10 +121,10 @@ int main()
     else
     {
         uint16_t length, cn_length;
-        const uint8_t *azure_linkid = pp_info_get_azure_linkid(&pp_info_out, &length);
         uint32_t linkid;
-        memcpy(&linkid, azure_linkid, length);
+        const uint8_t *azure_linkid = pp_info_get_azure_linkid(&pp_info_out, &length);
         const uint8_t *cn = pp_info_get_ssl_cn(&pp_info_out, &cn_length);
+        memcpy(&linkid, azure_linkid, length);
         printf("%d bytes PROXY protocol header:\n"
                "\tAzure Link ID: %u\n"
                "\tCRC32C checksum: %s\n"

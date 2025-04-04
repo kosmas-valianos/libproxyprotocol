@@ -28,7 +28,10 @@ libs_dir:
 libs/libproxyprotocol.so: src/proxy_protocol.o
 	$(CC) -shared -o $@ $+
 
-src/%.o: %.c src/proxy_protocol.h
+src/proxy_protocol.o: src/proxy_protocol.c src/proxy_protocol.h
+	$(CC) ${CFLAGS} -pedantic -c -o $@ $<
+
+src/.o: %.c src/proxy_protocol.h
 	$(CC) ${CFLAGS} -c -o $@ $<
 
 tests: tests/test_libproxyprotocol
@@ -42,6 +45,9 @@ example: examples/client_server
 
 examples/client_server: examples/client_server.o libs/libproxyprotocol.so
 	$(CC) -Llibs/ ${CFLAGS} -o $@ $< -lproxyprotocol
+
+examples/client_server.o: examples/client_server.c
+	$(CC) ${CFLAGS} -pedantic -c -o $@ $<
 
 clean:
 	$(RM) src/*.o libs/libproxyprotocol.so
