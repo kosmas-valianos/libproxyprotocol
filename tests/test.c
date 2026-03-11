@@ -38,11 +38,14 @@
 #define PP2_TYPE_NOOP           0x04
 #define PP2_TYPE_UNIQUE_ID      0x05
 #define PP2_TYPE_SSL            0x20
-#define PP2_SUBTYPE_SSL_VERSION 0x21
-#define PP2_SUBTYPE_SSL_CN      0x22
-#define PP2_SUBTYPE_SSL_CIPHER  0x23
-#define PP2_SUBTYPE_SSL_SIG_ALG 0x24
-#define PP2_SUBTYPE_SSL_KEY_ALG 0x25
+#define PP2_SUBTYPE_SSL_VERSION     0x21
+#define PP2_SUBTYPE_SSL_CN          0x22
+#define PP2_SUBTYPE_SSL_CIPHER      0x23
+#define PP2_SUBTYPE_SSL_SIG_ALG     0x24
+#define PP2_SUBTYPE_SSL_KEY_ALG     0x25
+#define PP2_SUBTYPE_SSL_GROUP       0x26
+#define PP2_SUBTYPE_SSL_SIG_SCHEME  0x27
+#define PP2_SUBTYPE_SSL_CLIENT_CERT 0x28
 #define PP2_TYPE_NETNS          0x30
 /* Custom TLVs */
 #define PP2_TYPE_AWS            0xEA
@@ -100,6 +103,42 @@ uint8_t pp2_hdr_vpce[] = {
             0x00, 0x00, 0x00, 0x00, /* NOOP TLV end */
 };
 
+/* Self-signed EC (prime256v1) X.509 DER certificate, CN=test */
+uint8_t test_client_cert_der[] = {
+    0x30, 0x82, 0x01, 0x72, 0x30, 0x82, 0x01, 0x19, 0xa0, 0x03, 0x02, 0x01,
+    0x02, 0x02, 0x14, 0x27, 0xd1, 0xb7, 0x26, 0x8d, 0xd6, 0x95, 0x5b, 0xda,
+    0xe3, 0x58, 0x8d, 0x19, 0xbe, 0x88, 0x84, 0x32, 0xcc, 0x62, 0xea, 0x30,
+    0x0a, 0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x04, 0x03, 0x02, 0x30,
+    0x0f, 0x31, 0x0d, 0x30, 0x0b, 0x06, 0x03, 0x55, 0x04, 0x03, 0x0c, 0x04,
+    0x74, 0x65, 0x73, 0x74, 0x30, 0x1e, 0x17, 0x0d, 0x32, 0x36, 0x30, 0x33,
+    0x31, 0x31, 0x31, 0x34, 0x34, 0x36, 0x34, 0x39, 0x5a, 0x17, 0x0d, 0x33,
+    0x36, 0x30, 0x33, 0x30, 0x38, 0x31, 0x34, 0x34, 0x36, 0x34, 0x39, 0x5a,
+    0x30, 0x0f, 0x31, 0x0d, 0x30, 0x0b, 0x06, 0x03, 0x55, 0x04, 0x03, 0x0c,
+    0x04, 0x74, 0x65, 0x73, 0x74, 0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2a,
+    0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, 0x06, 0x08, 0x2a, 0x86, 0x48, 0xce,
+    0x3d, 0x03, 0x01, 0x07, 0x03, 0x42, 0x00, 0x04, 0x88, 0x7b, 0xd1, 0x60,
+    0x92, 0x37, 0x00, 0x86, 0x8c, 0x3d, 0x06, 0x42, 0xf4, 0x1b, 0x9f, 0x27,
+    0x9e, 0xca, 0x74, 0xc5, 0xdb, 0xfd, 0x6f, 0x82, 0x39, 0x61, 0x70, 0xb9,
+    0x0b, 0xe8, 0x14, 0x07, 0xc6, 0x30, 0xea, 0xd8, 0xbb, 0x01, 0x05, 0x5f,
+    0x07, 0x6a, 0xe8, 0x1f, 0x2c, 0x4b, 0x43, 0x8f, 0x4d, 0x87, 0xa1, 0xad,
+    0xc6, 0x19, 0x05, 0xae, 0x2b, 0x09, 0x60, 0x55, 0x00, 0x4a, 0xe7, 0xb4,
+    0xa3, 0x53, 0x30, 0x51, 0x30, 0x1d, 0x06, 0x03, 0x55, 0x1d, 0x0e, 0x04,
+    0x16, 0x04, 0x14, 0xf9, 0x84, 0xb4, 0x02, 0xba, 0x3c, 0xa8, 0xa9, 0x19,
+    0x86, 0x9e, 0x3c, 0xe6, 0x77, 0x79, 0x39, 0x9a, 0x7f, 0x1e, 0x53, 0x30,
+    0x1f, 0x06, 0x03, 0x55, 0x1d, 0x23, 0x04, 0x18, 0x30, 0x16, 0x80, 0x14,
+    0xf9, 0x84, 0xb4, 0x02, 0xba, 0x3c, 0xa8, 0xa9, 0x19, 0x86, 0x9e, 0x3c,
+    0xe6, 0x77, 0x79, 0x39, 0x9a, 0x7f, 0x1e, 0x53, 0x30, 0x0f, 0x06, 0x03,
+    0x55, 0x1d, 0x13, 0x01, 0x01, 0xff, 0x04, 0x05, 0x30, 0x03, 0x01, 0x01,
+    0xff, 0x30, 0x0a, 0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x04, 0x03,
+    0x02, 0x03, 0x47, 0x00, 0x30, 0x44, 0x02, 0x20, 0x2a, 0x7e, 0xf8, 0xf6,
+    0x4c, 0x99, 0x27, 0x70, 0x24, 0x9b, 0x51, 0x8f, 0x29, 0x23, 0x9b, 0x41,
+    0x01, 0x93, 0x0f, 0x77, 0x84, 0xba, 0x08, 0x34, 0xee, 0x23, 0xa6, 0xaf,
+    0xe5, 0xdc, 0x7d, 0xf3, 0x02, 0x20, 0x53, 0xf2, 0x42, 0xd6, 0xab, 0xca,
+    0x9a, 0x66, 0xfe, 0x3e, 0x49, 0x77, 0xf6, 0xe4, 0xea, 0xcb, 0xff, 0xde,
+    0x1e, 0xf7, 0x2b, 0x97, 0x40, 0x99, 0xde, 0x2e, 0x9b, 0x15, 0x5c, 0x87,
+    0xb7, 0x7c
+};
+
 uint8_t pp2_hdr_ssl[] = {
             0x0d, 0x0a, 0x0d, 0x0a, /* Start of v2 signature */
             0x00, 0x0d, 0x0a, 0x51,
@@ -132,17 +171,23 @@ uint8_t pp2_hdr_ssl[] = {
             0x00, 0x00, 0x00, 0x00  /* PP2_TYPE_NOOP end */
 };
 
+static const uint32_t test_azure_linkid = 5678;
+
 static uint8_t pp_add_tlvs(pp_info_t *pp_info, const test_tlv_t (*add_tlvs)[10])
 {
     uint8_t i;
     uint8_t rc = 1;
     uint32_t azure_linkid = 0;
     uint16_t ssl_cn_len = 0;
+    uint16_t ssl_client_cert_len = 0;
     const uint8_t *ssl_cn = NULL;
+    const uint8_t *ssl_client_cert = NULL;
     const char *ssl_version = NULL;
     const char *ssl_cipher = NULL;
     const char *ssl_sig_alg = NULL;
     const char *ssl_key_alg = NULL;
+    const char *ssl_group = NULL;
+    const char *ssl_sig_scheme = NULL;
     for (i = 0; i < NUM_ELEMS(*add_tlvs) && rc == 1; i++)
     {
         const test_tlv_t *test_tlv = &(*add_tlvs)[i];
@@ -175,6 +220,16 @@ static uint8_t pp_add_tlvs(pp_info_t *pp_info, const test_tlv_t (*add_tlvs)[10])
             case PP2_SUBTYPE_SSL_KEY_ALG:
                 ssl_key_alg = (const char*) test_tlv->value;
                 break;
+            case PP2_SUBTYPE_SSL_GROUP:
+                ssl_group = (const char*) test_tlv->value;
+                break;
+            case PP2_SUBTYPE_SSL_SIG_SCHEME:
+                ssl_sig_scheme = (const char*) test_tlv->value;
+                break;
+            case PP2_SUBTYPE_SSL_CLIENT_CERT:
+                ssl_client_cert_len = test_tlv->value_len;
+                ssl_client_cert = test_tlv->value;
+                break;
             case PP2_TYPE_NETNS:
                 rc = pp_info_add_netns(pp_info, (const char*) test_tlv->value);
                 break;
@@ -198,7 +253,7 @@ static uint8_t pp_add_tlvs(pp_info_t *pp_info, const test_tlv_t (*add_tlvs)[10])
 
     if (pp_info->pp2_info.pp2_ssl_info.ssl)
     {
-        rc = pp_info_add_ssl(pp_info, ssl_version, ssl_cipher, ssl_sig_alg, ssl_key_alg, ssl_cn, ssl_cn_len);
+        rc = pp_info_add_ssl(pp_info, ssl_version, ssl_cipher, ssl_sig_alg, ssl_key_alg, ssl_group, ssl_sig_scheme, ssl_cn, ssl_cn_len, ssl_client_cert, ssl_client_cert_len);
     }
 
     return rc;
@@ -245,6 +300,15 @@ static uint8_t pp_verify_tlvs(const pp_info_t *pp_info, const test_tlv_t (*expec
             case PP2_SUBTYPE_SSL_KEY_ALG:
                 tlv_value = pp_info_get_ssl_key_alg(pp_info, &tlv_value_len);
                 break;
+            case PP2_SUBTYPE_SSL_GROUP:
+                tlv_value = pp_info_get_ssl_group(pp_info, &tlv_value_len);
+                break;
+            case PP2_SUBTYPE_SSL_SIG_SCHEME:
+                tlv_value = pp_info_get_ssl_sig_scheme(pp_info, &tlv_value_len);
+                break;
+            case PP2_SUBTYPE_SSL_CLIENT_CERT:
+                tlv_value = pp_info_get_ssl_client_cert(pp_info, &tlv_value_len);
+                break;
             case PP2_TYPE_NETNS:
                 tlv_value = pp_info_get_netns(pp_info, &tlv_value_len);
                 break;
@@ -252,8 +316,21 @@ static uint8_t pp_verify_tlvs(const pp_info_t *pp_info, const test_tlv_t (*expec
                 tlv_value = pp_info_get_aws_vpce_id(pp_info, &tlv_value_len);
                 break;
             case PP2_TYPE_AZURE:
+            {
+                uint32_t linkid_expected, linkid_got;
                 tlv_value = pp_info_get_azure_linkid(pp_info, &tlv_value_len);
-                break;
+                if (!tlv_value)
+                {
+                    return 0;
+                }
+                memcpy(&linkid_got, tlv_value, sizeof(uint32_t));
+                memcpy(&linkid_expected, test_tlv->value, sizeof(uint32_t));
+                if (linkid_got != linkid_expected)
+                {
+                    return 0;
+                }
+                continue;
+            }
             default:
                 break;
             }
@@ -538,13 +615,124 @@ int main(void)
             },
         },
         {
+            .name = "v2 PROXY protocol header: create and parse - PROXY, TCP over IPv4. TLVs: "
+                    "PP2_TYPE_SSL, PP2_SUBTYPE_SSL_VERSION, PP2_SUBTYPE_SSL_CN, PP2_SUBTYPE_SSL_CIPHER, "
+                    "PP2_SUBTYPE_SSL_SIG_ALG, PP2_SUBTYPE_SSL_KEY_ALG, PP2_SUBTYPE_SSL_GROUP, "
+                    "PP2_SUBTYPE_SSL_SIG_SCHEME, PP2_SUBTYPE_SSL_CLIENT_CERT",
+            .version = 2,
+            .pp_info_in = {
+                .address_family = ADDR_FAMILY_INET,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
+                .src_addr = "192.168.10.100",
+                .dst_addr = "192.168.11.90",
+                .src_port = 42332,
+                .dst_port = 8080,
+                .pp2_info = {
+                    .pp2_ssl_info = {
+                        .ssl = 1,
+                        .cert_in_connection = 1,
+                        .cert_in_session = 1,
+                        .cert_verified = 1,
+                    },
+                    .crc32c = 1
+                }
+            },
+            .add_tlvs = {
+                {
+                    .type = PP2_SUBTYPE_SSL_VERSION,
+                    .value_len = 8,
+                    .value = (const uint8_t*) "TLSv1.3"
+                },
+                {
+                    .type = PP2_SUBTYPE_SSL_CN,
+                    .value_len = 18,
+                    .value = (const uint8_t*) "proxy-protocol.com"
+                },
+                {
+                    .type = PP2_SUBTYPE_SSL_CIPHER,
+                    .value_len = 23,
+                    .value = (const uint8_t*) "TLS_AES_256_GCM_SHA384"
+                },
+                {
+                    .type = PP2_SUBTYPE_SSL_SIG_ALG,
+                    .value_len = 7,
+                    .value = (const uint8_t*) "SHA384"
+                },
+                {
+                    .type = PP2_SUBTYPE_SSL_KEY_ALG,
+                    .value_len = 8,
+                    .value = (const uint8_t*) "RSA4096"
+                },
+                {
+                    .type = PP2_SUBTYPE_SSL_GROUP,
+                    .value_len = 10,
+                    .value = (const uint8_t*) "secp256r1"
+                },
+                {
+                    .type = PP2_SUBTYPE_SSL_SIG_SCHEME,
+                    .value_len = 20,
+                    .value = (const uint8_t*) "rsa_pss_rsae_sha256"
+                },
+                {
+                    .type = PP2_SUBTYPE_SSL_CLIENT_CERT,
+                    .value_len = sizeof(test_client_cert_der),
+                    .value = test_client_cert_der
+                },
+            },
+            .pp_info_out_expected = tests[11].pp_info_in,
+        },
+        {
+            .name = "v2 PROXY protocol header: create and parse - PROXY, TCP over IPv4. TLVs: "
+                    "PP2_TYPE_ALPN, PP2_TYPE_AUTHORITY, PP2_TYPE_UNIQUE_ID, PP2_TYPE_NETNS, PP2_TYPE_AZURE",
+            .version = 2,
+            .pp_info_in = {
+                .address_family = ADDR_FAMILY_INET,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
+                .src_addr = "192.168.10.100",
+                .dst_addr = "192.168.11.90",
+                .src_port = 42332,
+                .dst_port = 8080,
+                .pp2_info = {
+                    .crc32c = 1
+                }
+            },
+            .add_tlvs = {
+                {
+                    .type = PP2_TYPE_ALPN,
+                    .value_len = 3,
+                    .value = (const uint8_t*) "\x02h2"
+                },
+                {
+                    .type = PP2_TYPE_AUTHORITY,
+                    .value_len = 18,
+                    .value = (const uint8_t*) "proxy-protocol.dev"
+                },
+                {
+                    .type = PP2_TYPE_UNIQUE_ID,
+                    .value_len = 8,
+                    .value = (const uint8_t*) "\x01\x02\x03\x04\x05\x06\x07\x08"
+                },
+                {
+                    .type = PP2_TYPE_NETNS,
+                    .value_len = 8,
+                    .value = (const uint8_t*) "mynetns"
+                },
+                {
+                    .type = PP2_TYPE_AZURE,
+                    .value_len = 4,
+                    .value = (const uint8_t*) &test_azure_linkid
+                },
+            },
+            .pp_info_out_expected = tests[12].pp_info_in,
+        },
+        {
             .name = "v1 PROXY protocol header: create and parse - AF_UNSPEC",
             .version = 1,
             .pp_info_in = {
                 .address_family = ADDR_FAMILY_UNSPEC,
                 .transport_protocol = TRANSPORT_PROTOCOL_UNSPEC,
             },
-            .pp_info_out_expected = tests[11].pp_info_in,
+            .pp_info_out_expected = tests[13].pp_info_in,
         },
         {
             .name = "v2 PROXY protocol header: pp2_create_healthcheck_hdr() and parse - LOCAL, AF_UNSPEC",

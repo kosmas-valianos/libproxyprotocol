@@ -111,11 +111,14 @@ typedef union
 #define PP2_TYPE_NOOP           0x04
 #define PP2_TYPE_UNIQUE_ID      0x05
 #define PP2_TYPE_SSL            0x20
-#define PP2_SUBTYPE_SSL_VERSION 0x21
-#define PP2_SUBTYPE_SSL_CN      0x22
-#define PP2_SUBTYPE_SSL_CIPHER  0x23
-#define PP2_SUBTYPE_SSL_SIG_ALG 0x24
-#define PP2_SUBTYPE_SSL_KEY_ALG 0x25
+#define PP2_SUBTYPE_SSL_VERSION     0x21
+#define PP2_SUBTYPE_SSL_CN          0x22
+#define PP2_SUBTYPE_SSL_CIPHER      0x23
+#define PP2_SUBTYPE_SSL_SIG_ALG     0x24
+#define PP2_SUBTYPE_SSL_KEY_ALG     0x25
+#define PP2_SUBTYPE_SSL_GROUP       0x26
+#define PP2_SUBTYPE_SSL_SIG_SCHEME  0x27
+#define PP2_SUBTYPE_SSL_CLIENT_CERT 0x28
 #define PP2_TYPE_NETNS          0x30
 /* Custom TLVs */
 #define PP2_TYPE_AWS            0xEA
@@ -318,7 +321,7 @@ static void pp_info_add_subtype_ssl(uint8_t *value, uint16_t *index, uint8_t sub
     *index += length;
 }
 
-uint8_t pp_info_add_ssl(pp_info_t *pp_info, const char *version, const char *cipher, const char *sig_alg, const char *key_alg, const uint8_t *cn, uint16_t cn_value_len)
+uint8_t pp_info_add_ssl(pp_info_t *pp_info, const char *version, const char *cipher, const char *sig_alg, const char *key_alg, const char *group, const char *sig_scheme, const uint8_t *cn, uint16_t cn_value_len, const uint8_t *client_cert, uint16_t client_cert_len)
 {
     const pp2_ssl_info_t *pp2_ssl_info = &pp_info->pp2_info.pp2_ssl_info;
     uint8_t client = pp2_ssl_info->ssl | pp2_ssl_info->cert_in_connection << 1 | pp2_ssl_info->cert_in_connection << 2;
@@ -327,15 +330,45 @@ uint8_t pp_info_add_ssl(pp_info_t *pp_info, const char *version, const char *cip
     size_t cipher_value_len = cipher ? strlen(cipher) : 0;
     size_t sig_alg_value_len = sig_alg ? strlen(sig_alg) : 0;
     size_t key_alg_value_len = key_alg ? strlen(key_alg) : 0;
-    size_t length = sizeof(client) + sizeof(verify)
-        + sizeof_pp2_tlv_t + version_value_len
-        + sizeof_pp2_tlv_t + cipher_value_len
-        + sizeof_pp2_tlv_t + sig_alg_value_len
-        + sizeof_pp2_tlv_t + key_alg_value_len
-        + sizeof_pp2_tlv_t + cn_value_len;
+    size_t group_value_len = group ? strlen(group) : 0;
+    size_t sig_scheme_value_len = sig_scheme ? strlen(sig_scheme) : 0;
+    size_t length = sizeof(client) + sizeof(verify);
     uint16_t index = 0;
     uint8_t *value = NULL;
     uint8_t rc;
+
+    if (version_value_len)
+    {
+        length += sizeof_pp2_tlv_t + version_value_len;
+    }
+    if (cipher_value_len)
+    {
+        length += sizeof_pp2_tlv_t + cipher_value_len;
+    }
+    if (sig_alg_value_len)
+    {
+        length += sizeof_pp2_tlv_t + sig_alg_value_len;
+    }
+    if (key_alg_value_len)
+    {
+        length += sizeof_pp2_tlv_t + key_alg_value_len;
+    }
+    if (group_value_len)
+    {
+        length += sizeof_pp2_tlv_t + group_value_len;
+    }
+    if (sig_scheme_value_len)
+    {
+        length += sizeof_pp2_tlv_t + sig_scheme_value_len;
+    }
+    if (cn_value_len && cn)
+    {
+        length += sizeof_pp2_tlv_t + cn_value_len;
+    }
+    if (client_cert_len && client_cert)
+    {
+        length += sizeof_pp2_tlv_t + client_cert_len;
+    }
 
     if (length > UINT16_MAX)
     {
@@ -350,7 +383,10 @@ uint8_t pp_info_add_ssl(pp_info_t *pp_info, const char *version, const char *cip
     pp_info_add_subtype_ssl(value, &index, PP2_SUBTYPE_SSL_CIPHER, (uint16_t) cipher_value_len, cipher);
     pp_info_add_subtype_ssl(value, &index, PP2_SUBTYPE_SSL_SIG_ALG, (uint16_t) sig_alg_value_len, sig_alg);
     pp_info_add_subtype_ssl(value, &index, PP2_SUBTYPE_SSL_KEY_ALG, (uint16_t) key_alg_value_len, key_alg);
+    pp_info_add_subtype_ssl(value, &index, PP2_SUBTYPE_SSL_GROUP, (uint16_t) group_value_len, group);
+    pp_info_add_subtype_ssl(value, &index, PP2_SUBTYPE_SSL_SIG_SCHEME, (uint16_t) sig_scheme_value_len, sig_scheme);
     pp_info_add_subtype_ssl(value, &index, PP2_SUBTYPE_SSL_CN, cn_value_len, cn);
+    pp_info_add_subtype_ssl(value, &index, PP2_SUBTYPE_SSL_CLIENT_CERT, client_cert_len, client_cert);
     rc = tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, PP2_TYPE_SSL, (uint16_t) length, value);
     free(value);
     return rc;
@@ -473,6 +509,21 @@ const uint8_t *pp_info_get_ssl_sig_alg(const pp_info_t *pp_info, uint16_t *lengt
 const uint8_t *pp_info_get_ssl_key_alg(const pp_info_t *pp_info, uint16_t *length)
 {
     return pp_info_get_tlv_value(pp_info, PP2_SUBTYPE_SSL_KEY_ALG, 0, length);
+}
+
+const uint8_t *pp_info_get_ssl_group(const pp_info_t *pp_info, uint16_t *length)
+{
+    return pp_info_get_tlv_value(pp_info, PP2_SUBTYPE_SSL_GROUP, 0, length);
+}
+
+const uint8_t *pp_info_get_ssl_sig_scheme(const pp_info_t *pp_info, uint16_t *length)
+{
+    return pp_info_get_tlv_value(pp_info, PP2_SUBTYPE_SSL_SIG_SCHEME, 0, length);
+}
+
+const uint8_t *pp_info_get_ssl_client_cert(const pp_info_t *pp_info, uint16_t *length)
+{
+    return pp_info_get_tlv_value(pp_info, PP2_SUBTYPE_SSL_CLIENT_CERT, 0, length);
 }
 
 const uint8_t *pp_info_get_netns(const pp_info_t *pp_info, uint16_t *length)
@@ -1074,12 +1125,15 @@ static int32_t pp2_parse_hdr(const uint8_t *buffer, uint32_t buffer_length, pp_i
                 case PP2_SUBTYPE_SSL_CIPHER:  /* US-ASCII */
                 case PP2_SUBTYPE_SSL_SIG_ALG: /* US-ASCII */
                 case PP2_SUBTYPE_SSL_KEY_ALG: /* US-ASCII */
+                case PP2_SUBTYPE_SSL_GROUP:   /* US-ASCII */
+                case PP2_SUBTYPE_SSL_SIG_SCHEME: /* US-ASCII */
                     if (!tlv_array_append_tlv_new_usascii(&pp_info->pp2_info.tlv_array, pp2_sub_tlv_ssl->type, pp2_sub_tlv_ssl_len, pp2_sub_tlv_ssl->value))
                     {
                         return -ERR_HEAP_ALLOC;
                     }
                     break;
                 case PP2_SUBTYPE_SSL_CN: /* UTF8 */
+                case PP2_SUBTYPE_SSL_CLIENT_CERT: /* raw binary */
                     if (!tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, pp2_sub_tlv_ssl->type, pp2_sub_tlv_ssl_len, pp2_sub_tlv_ssl->value))
                     {
                         return -ERR_HEAP_ALLOC;

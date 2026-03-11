@@ -140,7 +140,7 @@ typedef struct
 uint8_t pp_info_add_alpn(pp_info_t *pp_info, uint16_t length, const uint8_t *alpn);
 uint8_t pp_info_add_authority(pp_info_t *pp_info, uint16_t length, const uint8_t *host_name);
 uint8_t pp_info_add_unique_id(pp_info_t *pp_info, uint16_t length, const uint8_t *unique_id);
-uint8_t pp_info_add_ssl(pp_info_t *pp_info, const char *version, const char *cipher, const char *sig_alg, const char *key_alg, const uint8_t *cn, uint16_t cn_len);
+uint8_t pp_info_add_ssl(pp_info_t *pp_info, const char *version, const char *cipher, const char *sig_alg, const char *key_alg, const char *group, const char *sig_scheme, const uint8_t *cn, uint16_t cn_len, const uint8_t *client_cert, uint16_t client_cert_len);
 uint8_t pp_info_add_netns(pp_info_t *pp_info, const char *netns);
 uint8_t pp_info_add_aws_vpce_id(pp_info_t *pp_info, const char *vpce_id);
 uint8_t pp_info_add_azure_linkid(pp_info_t *pp_info, uint32_t linkid);
@@ -161,6 +161,9 @@ const uint8_t *pp_info_get_ssl_cn(const pp_info_t *pp_info, uint16_t *length);
 const uint8_t *pp_info_get_ssl_cipher(const pp_info_t *pp_info, uint16_t *length);
 const uint8_t *pp_info_get_ssl_sig_alg(const pp_info_t *pp_info, uint16_t *length);
 const uint8_t *pp_info_get_ssl_key_alg(const pp_info_t *pp_info, uint16_t *length);
+const uint8_t *pp_info_get_ssl_group(const pp_info_t *pp_info, uint16_t *length);
+const uint8_t *pp_info_get_ssl_sig_scheme(const pp_info_t *pp_info, uint16_t *length);
+const uint8_t *pp_info_get_ssl_client_cert(const pp_info_t *pp_info, uint16_t *length);
 const uint8_t *pp_info_get_netns(const pp_info_t *pp_info, uint16_t *length);
 const uint8_t *pp_info_get_aws_vpce_id(const pp_info_t *pp_info, uint16_t *length);
 const uint8_t *pp_info_get_azure_linkid(const pp_info_t *pp_info, uint16_t *length);
