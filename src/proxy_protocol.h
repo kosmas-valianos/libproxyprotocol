@@ -211,6 +211,6 @@ uint8_t *pp_create_hdr(uint8_t version, const pp_info_t *pp_info, uint16_t *pp_h
  *                  == 0 No PROXY protocol header found
  *                  <  0 Error occurred. Optionally, pp_strerror() with that value can be used to get a descriptive message
  */
-int32_t pp_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t *pp_info);
+int32_t pp_parse_hdr(const uint8_t *buffer, uint32_t buffer_length, pp_info_t *pp_info);
 
 #endif

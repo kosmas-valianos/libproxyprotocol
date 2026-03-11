@@ -583,14 +583,18 @@ static uint32_t crctable[256] = {
  0xBE2DA0A5L, 0x4C4623A6L, 0x5F16D052L, 0xAD7D5351L
 };
 
-static uint32_t crc32c(const uint8_t* buf, uint32_t len)
+static uint32_t crc32c_continue(uint32_t crc, const uint8_t* buf, uint32_t len)
 {
-    uint32_t crc = 0xffffffff;
     while (len-- > 0)
     {
         crc = (crc >> 8) ^ crctable[(crc ^ (*buf++)) & 0xFF];
     }
-    return crc ^ 0xffffffff;
+    return crc;
+}
+
+static uint32_t crc32c(const uint8_t* buf, uint32_t len)
+{
+    return crc32c_continue(0xffffffff, buf, len) ^ 0xffffffff;
 }
 
 static uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, int32_t *error)
@@ -844,13 +848,13 @@ uint8_t *pp_create_hdr(uint8_t version, const pp_info_t *pp_info, uint16_t *pp_h
 }
 
 /* Verifies and parses a version 2 PROXY protocol header */
-static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t *pp_info)
+static int32_t pp2_parse_hdr(const uint8_t *buffer, uint32_t buffer_length, pp_info_t *pp_info)
 {
     const uint8_t *pp2_hdr = buffer;
-    const proxy_hdr_v2_t *proxy_hdr_v2 = (proxy_hdr_v2_t*) buffer;
+    const proxy_hdr_v2_t *proxy_hdr_v2 = (const proxy_hdr_v2_t*) buffer;
     uint8_t cmd, fam;
     uint16_t len = 0, tlv_vectors_len = 0;
-    proxy_addr_t *addr = NULL;
+    const proxy_addr_t *addr = NULL;
 
     /* The next byte (the 13th one) is the protocol version and command */
     /* The highest four bits contains the version. Only \x2 is accepted */
@@ -924,7 +928,7 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
      * - destination layer 4 address if any, in network byte order (port)
      */
     buffer += sizeof(proxy_hdr_v2_t);
-    addr = (proxy_addr_t*) buffer;
+    addr = (const proxy_addr_t*) buffer;
     if (fam == AF_UNSPEC)
     {
         tlv_vectors_len = len;
@@ -977,7 +981,7 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
     /* Any TLV vector must be at least 3 bytes */
     while (tlv_vectors_len > sizeof_pp2_tlv_t)
     {
-        pp2_tlv_t *pp2_tlv = (pp2_tlv_t*) buffer;
+        const pp2_tlv_t *pp2_tlv = (const pp2_tlv_t*) buffer;
         uint16_t pp2_tlv_len = pp2_tlv->length_hi << 8 | pp2_tlv->length_lo;
         uint16_t pp2_tlv_offset = sizeof_pp2_tlv_t + pp2_tlv_len;
         if (pp2_tlv_offset > tlv_vectors_len)
@@ -996,7 +1000,9 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
             break;
         case PP2_TYPE_CRC32C: /* 32-bit number */
         {
-            uint32_t crc32c_chksum, crc32c_calculated;
+            uint32_t crc32c_chksum, crc32c_calculated, crc;
+            const uint8_t zeros[4] = {0, 0, 0, 0};
+            uint32_t total_hdr_len, offset_to_chksum_value, after_chksum_offset;
 
             if (pp2_tlv_len != sizeof(uint32_t))
             {
@@ -1006,11 +1012,20 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
             /* Received CRC32c checksum */
             memcpy(&crc32c_chksum, pp2_tlv->value, pp2_tlv_len);
 
-            /* Calculate the CRC32c checksum value of the whole PROXY header */
-            memset(pp2_tlv->value, 0, pp2_tlv_len);
-            crc32c_calculated = crc32c(pp2_hdr, sizeof(proxy_hdr_v2_t) + len);
+            /* Calculate the CRC32c checksum value of the whole PROXY header.
+             * The checksum is computed with the checksum field treated as zeros.
+             * Instead of zeroing the field in the buffer, compute CRC in 3 segments:
+             * before the checksum value, 4 zero bytes, after the checksum value. */
+            total_hdr_len = sizeof(proxy_hdr_v2_t) + len;
+            offset_to_chksum_value = (const uint8_t*)pp2_tlv->value - pp2_hdr;
+            after_chksum_offset = offset_to_chksum_value + sizeof(uint32_t);
 
-            /* Verify that the calculated CRC32c checksum is the same as the received CRC32c checksum*/
+            crc = crc32c_continue(0xffffffff, pp2_hdr, offset_to_chksum_value);
+            crc = crc32c_continue(crc, zeros, sizeof(uint32_t));
+            crc = crc32c_continue(crc, pp2_hdr + after_chksum_offset, total_hdr_len - after_chksum_offset);
+            crc32c_calculated = crc ^ 0xffffffff;
+
+            /* Verify that the calculated CRC32c checksum is the same as the received CRC32c checksum */
             if (memcmp(&crc32c_chksum, &crc32c_calculated, 4))
             {
                 return -ERR_PP2_TYPE_CRC32C;
@@ -1037,7 +1052,7 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
             break;
         case PP2_TYPE_SSL:
         {
-            pp2_tlv_ssl_t *pp2_tlv_ssl = (pp2_tlv_ssl_t*) pp2_tlv->value;
+            const pp2_tlv_ssl_t *pp2_tlv_ssl = (const pp2_tlv_ssl_t*) pp2_tlv->value;
             uint16_t pp2_tlvs_ssl_len = 0, pp2_sub_tlv_offset = 0;
             uint8_t tlv_ssl_version_found = 0;
 
@@ -1050,7 +1065,7 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
             pp2_tlvs_ssl_len = pp2_tlv_len - sizeof(pp2_tlv_ssl->client) - sizeof(pp2_tlv_ssl->verify);
             while (pp2_sub_tlv_offset < pp2_tlvs_ssl_len)
             {
-                pp2_tlv_t *pp2_sub_tlv_ssl = (pp2_tlv_t*) ((uint8_t*) pp2_tlv_ssl->sub_tlv + pp2_sub_tlv_offset);
+                const pp2_tlv_t *pp2_sub_tlv_ssl = (const pp2_tlv_t*) ((const uint8_t*) pp2_tlv_ssl->sub_tlv + pp2_sub_tlv_offset);
                 uint16_t pp2_sub_tlv_ssl_len = pp2_sub_tlv_ssl->length_hi << 8 | pp2_sub_tlv_ssl->length_lo;
                 switch (pp2_sub_tlv_ssl->type)
                 {
@@ -1090,12 +1105,12 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
             break;
         case PP2_TYPE_AWS:
         {
-            pp2_tlv_aws_t *pp2_tlv_aws;
+            const pp2_tlv_aws_t *pp2_tlv_aws;
             if (pp2_tlv_len < sizeof(pp2_tlv_aws_t))
             {
                 return -ERR_PP2_TYPE_AWS;
             }
-            pp2_tlv_aws = (pp2_tlv_aws_t*) pp2_tlv->value;
+            pp2_tlv_aws = (const pp2_tlv_aws_t*) pp2_tlv->value;
             /* Connection is done through Private Link/Interface VPC endpoint */
             if (pp2_tlv_aws->type == PP2_SUBTYPE_AWS_VPCE_ID) /* US-ASCII */
             {
@@ -1109,12 +1124,12 @@ static int32_t pp2_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t 
         }
         case PP2_TYPE_AZURE:
         {
-            pp2_tlv_azure_t *pp2_tlv_azure;
+            const pp2_tlv_azure_t *pp2_tlv_azure;
             if (pp2_tlv_len < sizeof(pp2_tlv_azure_t))
             {
                 return -ERR_PP2_TYPE_AZURE;
             }
-            pp2_tlv_azure = (pp2_tlv_azure_t*) pp2_tlv->value;
+            pp2_tlv_azure = (const pp2_tlv_azure_t*) pp2_tlv->value;
             /* Connection is done through Private Link service */
             if (pp2_tlv_azure->type == PP2_SUBTYPE_AZURE_PRIVATEENDPOINT_LINKID) /* 32-bit number */
             {
@@ -1309,7 +1324,7 @@ static int32_t pp1_parse_hdr(const uint8_t *buffer, uint32_t buffer_length, pp_i
     return pp1_hdr_len;
 }
 
-int32_t pp_parse_hdr(uint8_t *buffer, uint32_t buffer_length, pp_info_t *pp_info)
+int32_t pp_parse_hdr(const uint8_t *buffer, uint32_t buffer_length, pp_info_t *pp_info)
 {
     memset(pp_info, 0, sizeof(*pp_info));
     if (buffer_length >= 16 && !memcmp(buffer, PP2_SIG, 12))
