@@ -973,6 +973,31 @@ int main(void)
             .raw_bytes_in_length = 108,
             .rc_expected = -ERR_PP1_CRLF,
         },
+        {
+            .name = "v1 PROXY protocol header: -ERR_PP1_SRC_PORT (+ prefix)",
+            .raw_bytes_in = (const uint8_t*) "PROXY TCP4 1.2.3.4 5.6.7.8 +80 443\r\n",
+            .raw_bytes_in_length = 36,
+            .rc_expected = -ERR_PP1_SRC_PORT,
+            .pp_info_out_expected = {
+                .address_family = ADDR_FAMILY_INET,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
+                .src_addr = "1.2.3.4",
+                .dst_addr = "5.6.7.8",
+            },
+        },
+        {
+            .name = "v1 PROXY protocol header: -ERR_PP1_DST_PORT (trailing garbage)",
+            .raw_bytes_in = (const uint8_t*) "PROXY TCP4 1.2.3.4 5.6.7.8 80 443a\r\n",
+            .raw_bytes_in_length = 36,
+            .rc_expected = -ERR_PP1_DST_PORT,
+            .pp_info_out_expected = {
+                .address_family = ADDR_FAMILY_INET,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
+                .src_addr = "1.2.3.4",
+                .dst_addr = "5.6.7.8",
+                .src_port = 80,
+            },
+        },
     };
 
     /* Run tests */
@@ -993,6 +1018,7 @@ int main(void)
             }
             memcpy(buffer, tests[i].raw_bytes_in, tests[i].raw_bytes_in_length);
             pp_parse_hdr_rc = pp_parse_hdr(buffer, tests[i].raw_bytes_in_length, &pp_info_out);
+            free(buffer);
         }
         else
         {
@@ -1056,6 +1082,44 @@ int main(void)
         pp_info_clear(&pp_info_out);
         printf("PASSED\n");
     }
+
+    /* Test pp_info_add_* validation failures */
+    printf("Running test: pp_info_add_unique_id length > 128...");
+    {
+        pp_info_t pp_info = { 0 };
+        uint8_t dummy = 0;
+        if (pp_info_add_unique_id(&pp_info, 129, &dummy) != 0)
+        {
+            printf("FAILED\n");
+            return EXIT_FAILURE;
+        }
+        pp_info_clear(&pp_info);
+    }
+    printf("PASSED\n");
+
+    printf("Running test: pp_info_add_netns NULL...");
+    {
+        pp_info_t pp_info = { 0 };
+        if (pp_info_add_netns(&pp_info, NULL) != 0)
+        {
+            printf("FAILED\n");
+            return EXIT_FAILURE;
+        }
+        pp_info_clear(&pp_info);
+    }
+    printf("PASSED\n");
+
+    printf("Running test: pp_info_add_aws_vpce_id NULL...");
+    {
+        pp_info_t pp_info = { 0 };
+        if (pp_info_add_aws_vpce_id(&pp_info, NULL) != 0)
+        {
+            printf("FAILED\n");
+            return EXIT_FAILURE;
+        }
+        pp_info_clear(&pp_info);
+    }
+    printf("PASSED\n");
 
     /* Test pp_strerror() */
     printf("Running test: pp_strerror()...");

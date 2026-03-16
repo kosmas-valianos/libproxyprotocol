@@ -217,7 +217,7 @@ static uint8_t parse_port(const char *value, uint16_t *usport)
 {
     char *endptr = NULL;
     uint64_t port = strtoul(value, &endptr, 10);
-    if (endptr == value || port > UINT16_MAX)
+    if (endptr == value || *endptr != '\0' || *value == '+' || port > UINT16_MAX)
     {
         return 0;
     }
@@ -701,7 +701,8 @@ static uint32_t crc32c(const uint8_t* buf, uint32_t len)
 static uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, int32_t *error)
 {
     proxy_hdr_v2_t proxy_hdr_v2 = { PP2_SIG, '\x21', 0, 0 };
-    uint16_t proxy_addr_len, len, padding_bytes, index;
+    uint16_t proxy_addr_len, padding_bytes, index;
+    uint32_t len;
     proxy_addr_t proxy_addr;
     const tlv_array_t *tlv_array;
     uint32_t i;
@@ -782,7 +783,12 @@ static uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, 
     {
         len += sizeof_pp2_tlv_t + sizeof(uint32_t);
     }
-    *pp2_hdr_len = sizeof(proxy_hdr_v2_t) + len;
+    if (sizeof(proxy_hdr_v2_t) + len > UINT16_MAX)
+    {
+        *error = -ERR_PP2_LENGTH;
+        return NULL;
+    }
+    *pp2_hdr_len = (uint16_t)(sizeof(proxy_hdr_v2_t) + len);
     if (pp_info->pp2_info.alignment_power > 1)
     {
         uint16_t alignment = 1 << pp_info->pp2_info.alignment_power;
@@ -794,13 +800,13 @@ static uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, 
             {
                 pp2_hdr_len_padded += alignment;
             }
-            padding_bytes = pp2_hdr_len_padded - sizeof(proxy_hdr_v2_t) - len - sizeof_pp2_tlv_t;
+            padding_bytes = pp2_hdr_len_padded - (uint16_t)sizeof(proxy_hdr_v2_t) - (uint16_t)len - sizeof_pp2_tlv_t;
 
             *pp2_hdr_len = pp2_hdr_len_padded;
-            len = pp2_hdr_len_padded - sizeof(proxy_hdr_v2_t);
+            len = pp2_hdr_len_padded - (uint32_t)sizeof(proxy_hdr_v2_t);
         }
     }
-    proxy_hdr_v2.len = htons(len);
+    proxy_hdr_v2.len = htons((uint16_t)len);
 
     /* Create the PROXY protocol header */
     pp2_hdr = malloc(*pp2_hdr_len);
@@ -911,7 +917,7 @@ static uint8_t *pp1_create_hdr(const pp_info_t *pp_info, uint16_t *pp1_hdr_len, 
         }
         memcpy(src_addr, pp_info->src_addr, sizeof(src_addr));
         memcpy(dst_addr, pp_info->dst_addr, sizeof(dst_addr));
-        *pp1_hdr_len = _sprintf(block, "PROXY %s %s %s %hu %hu"CRLF, fam, src_addr, dst_addr, pp_info->src_port, pp_info->dst_port);
+        *pp1_hdr_len = (uint16_t)_sprintf(block, "PROXY %s %s %s %hu %hu"CRLF, fam, src_addr, dst_addr, pp_info->src_port, pp_info->dst_port);
     }
     else
     {
