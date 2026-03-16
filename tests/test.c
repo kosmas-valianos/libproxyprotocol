@@ -964,6 +964,6 @@ int main(void)
     }
     printf("PASSED\n");
 
-    printf("ALl tests completed successfully\n");
+    printf("All tests completed successfully\n");
     return EXIT_SUCCESS;
 }

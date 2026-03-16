@@ -205,7 +205,7 @@ uint8_t *pp2_create_healthcheck_hdr(uint16_t *pp2_hdr_len, int32_t *error);
  */
 uint8_t *pp_create_hdr(uint8_t version, const pp_info_t *pp_info, uint16_t *pp_hdr_len, int32_t *error);
 
-/* Inpects the buffer for a PROXY protocol header and extracts all the information if any
+/* Inspects the buffer for a PROXY protocol header and extracts all the information if any
  *
  * buffer           Buffer to be inspected and parsed. Typically the buffer given for a read operation
  * buffer_length    Buffer's length. Typically the bytes read from the read operation

@@ -65,7 +65,7 @@ So a 108-byte buffer is always enough to store all the line and a trailing zero
 for string processing.
  */
 
-#define PP1_MAX_LENGHT 108
+#define PP1_MAX_LENGTH 108
 #define PP1_SIG        "PROXY"
 #define CRLF           "\r\n"
 
@@ -215,8 +215,9 @@ const char *pp_strerror(int32_t error)
 
 static uint8_t parse_port(const char *value, uint16_t *usport)
 {
-    uint64_t port = strtoul(value, NULL, 10);
-    if (port == 0 || port > UINT16_MAX)
+    char *endptr = NULL;
+    uint64_t port = strtoul(value, &endptr, 10);
+    if (endptr == value || port > UINT16_MAX)
     {
         return 0;
     }
@@ -254,12 +255,12 @@ static uint8_t tlv_array_append_tlv(tlv_array_t *tlv_array, pp2_tlv_t *tlv)
     if (tlv_array->size == tlv_array->len)
     {
         pp2_tlv_t **tlvs = NULL;
-        tlv_array->size += 5;
-        tlvs = realloc(tlv_array->tlvs, tlv_array->size * sizeof(pp2_tlv_t*));
+        tlvs = realloc(tlv_array->tlvs, (tlv_array->size + 5) * sizeof(pp2_tlv_t*));
         if (!tlvs)
         {
             return 0;
         }
+        tlv_array->size += 5;
         tlv_array->tlvs = tlvs;
     }
 
@@ -271,8 +272,13 @@ static uint8_t tlv_array_append_tlv(tlv_array_t *tlv_array, pp2_tlv_t *tlv)
 static uint8_t tlv_array_append_tlv_new(tlv_array_t *tlv_array, uint8_t type, uint16_t length, const void *value)
 {
     pp2_tlv_t *tlv = tlv_new(type, length, value);
-    if (!tlv || !tlv_array_append_tlv(tlv_array, tlv))
+    if (!tlv)
     {
+        return 0;
+    }
+    if (!tlv_array_append_tlv(tlv_array, tlv))
+    {
+        free(tlv);
         return 0;
     }
     return 1;
@@ -281,8 +287,13 @@ static uint8_t tlv_array_append_tlv_new(tlv_array_t *tlv_array, uint8_t type, ui
 static uint8_t tlv_array_append_tlv_new_usascii(tlv_array_t *tlv_array, uint8_t type, uint16_t length, const void *value)
 {
     pp2_tlv_t *tlv = tlv_new(type, length + 1, value);
-    if (!tlv || !tlv_array_append_tlv(tlv_array, tlv))
+    if (!tlv)
     {
+        return 0;
+    }
+    if (!tlv_array_append_tlv(tlv_array, tlv))
+    {
+        free(tlv);
         return 0;
     }
     tlv->value[length] = '\0';
@@ -324,7 +335,7 @@ static void pp_info_add_subtype_ssl(uint8_t *value, uint16_t *index, uint8_t sub
 uint8_t pp_info_add_ssl(pp_info_t *pp_info, const char *version, const char *cipher, const char *sig_alg, const char *key_alg, const char *group, const char *sig_scheme, const uint8_t *cn, uint16_t cn_value_len, const uint8_t *client_cert, uint16_t client_cert_len)
 {
     const pp2_ssl_info_t *pp2_ssl_info = &pp_info->pp2_info.pp2_ssl_info;
-    uint8_t client = pp2_ssl_info->ssl | pp2_ssl_info->cert_in_connection << 1 | pp2_ssl_info->cert_in_connection << 2;
+    uint8_t client = pp2_ssl_info->ssl | pp2_ssl_info->cert_in_connection << 1 | pp2_ssl_info->cert_in_session << 2;
     uint32_t verify = !pp2_ssl_info->cert_verified;
     size_t version_value_len = version ? strlen(version) : 0;
     size_t cipher_value_len = cipher ? strlen(cipher) : 0;
@@ -376,6 +387,10 @@ uint8_t pp_info_add_ssl(pp_info_t *pp_info, const char *version, const char *cip
     }
 
     value = malloc(length);
+    if (!value)
+    {
+        return 0;
+    }
     value[index++] = client;
     memcpy(value + index, &verify, sizeof(verify));
     index += sizeof(verify);
@@ -402,6 +417,10 @@ uint8_t pp_info_add_aws_vpce_id(pp_info_t *pp_info, const char *vpce_id)
     uint16_t length = sizeof_pp2_tlv_aws_t + (uint16_t) strlen(vpce_id);
     pp2_tlv_aws_t *pp2_tlv_aws = malloc(length);
     uint8_t rc;
+    if (!pp2_tlv_aws)
+    {
+        return 0;
+    }
     pp2_tlv_aws->type = PP2_SUBTYPE_AWS_VPCE_ID;
     memcpy(pp2_tlv_aws->value, vpce_id, strlen(vpce_id));
     rc = tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, PP2_TYPE_AWS, length, pp2_tlv_aws);
@@ -414,6 +433,10 @@ uint8_t pp_info_add_azure_linkid(pp_info_t *pp_info, uint32_t linkid)
     uint16_t length = (uint16_t) sizeof(pp2_tlv_azure_t);
     pp2_tlv_azure_t *pp2_tlv_azure = malloc(length);
     uint8_t rc;
+    if (!pp2_tlv_azure)
+    {
+        return 0;
+    }
     pp2_tlv_azure->type = PP2_SUBTYPE_AZURE_PRIVATEENDPOINT_LINKID;
     pp2_tlv_azure->linkid = linkid;
     rc = tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, PP2_TYPE_AZURE, length, pp2_tlv_azure);
@@ -811,7 +834,7 @@ uint8_t *pp2_create_healthcheck_hdr(uint16_t *pp2_hdr_len, int32_t *error)
 
 static uint8_t *pp1_create_hdr(const pp_info_t *pp_info, uint16_t *pp1_hdr_len, int32_t *error)
 {
-    char block[PP1_MAX_LENGHT];
+    char block[PP1_MAX_LENGTH];
     uint8_t *pp1_hdr = NULL;
 
     if (pp_info->transport_protocol != TRANSPORT_PROTOCOL_UNSPEC && pp_info->transport_protocol != TRANSPORT_PROTOCOL_STREAM)
@@ -1022,6 +1045,9 @@ static int32_t pp2_parse_hdr(const uint8_t *buffer, uint32_t buffer_length, pp_i
     {
         memcpy(pp_info->src_addr, addr->unix_addr.src_addr, sizeof(addr->unix_addr.src_addr));
         memcpy(pp_info->dst_addr, addr->unix_addr.dst_addr, sizeof(addr->unix_addr.dst_addr));
+
+        buffer += sizeof(addr->unix_addr);
+        tlv_vectors_len = len - sizeof(addr->unix_addr);
     }
     else
     {
@@ -1207,7 +1233,7 @@ static int32_t pp2_parse_hdr(const uint8_t *buffer, uint32_t buffer_length, pp_i
 
 static int32_t pp1_parse_hdr(const uint8_t *buffer, uint32_t buffer_length, pp_info_t *pp_info)
 {
-    char block[PP1_MAX_LENGHT] = { 0 };
+    char block[PP1_MAX_LENGTH] = { 0 };
     char *ptr = block;
     int32_t pp1_hdr_len = 0;
     char *block_end = NULL;
@@ -1222,7 +1248,7 @@ static int32_t pp1_parse_hdr(const uint8_t *buffer, uint32_t buffer_length, pp_i
     char src_port_str[6] = { 0 };
     char dst_port_str[6] = { 0 };
 
-    memcpy(block, buffer, buffer_length < PP1_MAX_LENGHT ? buffer_length : PP1_MAX_LENGHT);
+    memcpy(block, buffer, buffer_length < PP1_MAX_LENGTH ? buffer_length : PP1_MAX_LENGTH);
 
     block_end = strstr(block, CRLF);
     if (!block_end)
@@ -1282,7 +1308,7 @@ static int32_t pp1_parse_hdr(const uint8_t *buffer, uint32_t buffer_length, pp_i
     }
     else
     {
-        return -ERR_PP1_TRANSPORT_FAMILY;;
+        return -ERR_PP1_TRANSPORT_FAMILY;
     }
 
     /* Exactly one space */
@@ -1296,13 +1322,13 @@ static int32_t pp1_parse_hdr(const uint8_t *buffer, uint32_t buffer_length, pp_i
     src_address_end = strchr(ptr, ' ');
     if (!src_address_end)
     {
-        return sa_family == AF_INET ? ERR_PP1_IPV4_SRC_IP : ERR_PP1_IPV6_SRC_IP;
+        return sa_family == AF_INET ? -ERR_PP1_IPV4_SRC_IP : -ERR_PP1_IPV6_SRC_IP;
     }
     src_address_length = src_address_end - ptr;
     memcpy(pp_info->src_addr, ptr, src_address_length);
     if (inet_pton(sa_family, pp_info->src_addr, &src_sin_addr) != 1)
     {
-        return sa_family == AF_INET ? ERR_PP1_IPV4_SRC_IP : ERR_PP1_IPV6_SRC_IP;
+        return sa_family == AF_INET ? -ERR_PP1_IPV4_SRC_IP : -ERR_PP1_IPV6_SRC_IP;
     }
     ptr += src_address_length;
 
@@ -1317,13 +1343,13 @@ static int32_t pp1_parse_hdr(const uint8_t *buffer, uint32_t buffer_length, pp_i
     dst_address_end = strchr(ptr, ' ');
     if (!dst_address_end)
     {
-        return sa_family == AF_INET ? ERR_PP1_IPV4_DST_IP : ERR_PP1_IPV6_DST_IP;
+        return sa_family == AF_INET ? -ERR_PP1_IPV4_DST_IP : -ERR_PP1_IPV6_DST_IP;
     }
     dst_address_length = dst_address_end - ptr;
     memcpy(pp_info->dst_addr, ptr, dst_address_length);
     if (inet_pton(sa_family, pp_info->dst_addr, &dst_sin_addr) != 1)
     {
-        return sa_family == AF_INET ? ERR_PP1_IPV4_DST_IP : ERR_PP1_IPV6_DST_IP;
+        return sa_family == AF_INET ? -ERR_PP1_IPV4_DST_IP : -ERR_PP1_IPV6_DST_IP;
     }
     ptr += dst_address_length;
 
@@ -1341,6 +1367,10 @@ static int32_t pp1_parse_hdr(const uint8_t *buffer, uint32_t buffer_length, pp_i
         return -ERR_PP1_SRC_PORT;
     }
     src_port_length = src_port_end - ptr;
+    if (src_port_length == 0 || src_port_length > 5)
+    {
+        return -ERR_PP1_SRC_PORT;
+    }
     memcpy(src_port_str, ptr, src_port_length);
     if (!parse_port(src_port_str, &pp_info->src_port))
     {
@@ -1362,6 +1392,10 @@ static int32_t pp1_parse_hdr(const uint8_t *buffer, uint32_t buffer_length, pp_i
         return -ERR_PP1_DST_PORT;
     }
     dst_port_length = dst_port_end - ptr;
+    if (dst_port_length == 0 || dst_port_length > 5)
+    {
+        return -ERR_PP1_DST_PORT;
+    }
     memcpy(dst_port_str, ptr, dst_port_length);
     if (!parse_port(dst_port_str, &pp_info->dst_port))
     {
@@ -1387,7 +1421,7 @@ int32_t pp_parse_hdr(const uint8_t *buffer, uint32_t buffer_length, pp_info_t *p
     }
     else if (buffer_length >= 8 && !memcmp(buffer, PP1_SIG, 5))
     {
-        return pp1_parse_hdr(buffer, buffer_length, pp_info);;
+        return pp1_parse_hdr(buffer, buffer_length, pp_info);
     }
     else
     {
