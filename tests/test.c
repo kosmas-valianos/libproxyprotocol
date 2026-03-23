@@ -173,6 +173,48 @@ uint8_t pp2_hdr_ssl[] = {
 
 static const uint32_t test_azure_linkid = 5678;
 
+/* v2 header with TLV length 0xFFFD (65533) causing uint16_t overflow in TLV offset calculation */
+uint8_t pp2_hdr_tlv_overflow[] = {
+            0x0d, 0x0a, 0x0d, 0x0a, /* Start of v2 signature */
+            0x00, 0x0d, 0x0a, 0x51,
+            0x55, 0x49, 0x54, 0x0a, /* End of v2 signature */
+            0x21, 0x11, 0x00, 0x10, /* ver_cmd, fam and len (16) */
+            0xc0, 0xa8, 0x0a, 0x64, /* Source IP */
+            0xc0, 0xa8, 0x0b, 0x5a, /* Destination IP */
+            0xa5, 0x5c, 0x1f, 0x90, /* Source port, Destination port */
+            0x01, 0xff, 0xfd, 0x00, /* PP2_TYPE_ALPN TLV with length 0xFFFD, 1 byte value */
+};
+
+/* v2 header with PP2_TYPE_SSL TLV too short (length 2, needs at least 5) */
+uint8_t pp2_hdr_ssl_too_short[] = {
+            0x0d, 0x0a, 0x0d, 0x0a, /* Start of v2 signature */
+            0x00, 0x0d, 0x0a, 0x51,
+            0x55, 0x49, 0x54, 0x0a, /* End of v2 signature */
+            0x21, 0x11, 0x00, 0x11, /* ver_cmd, fam and len (17) */
+            0xc0, 0xa8, 0x0a, 0x64, /* Source IP */
+            0xc0, 0xa8, 0x0b, 0x5a, /* Destination IP */
+            0xa5, 0x5c, 0x1f, 0x90, /* Source port, Destination port */
+            0x20, 0x00, 0x02,       /* PP2_TYPE_SSL TLV with length 2 */
+            0x00, 0x00,             /* Truncated SSL data (too short) */
+};
+
+/* v2 header with PP2_TYPE_SSL sub-TLV trailing bytes (1 valid sub-TLV + 2 orphan bytes) */
+uint8_t pp2_hdr_ssl_trailing_bytes[] = {
+            0x0d, 0x0a, 0x0d, 0x0a, /* Start of v2 signature */
+            0x00, 0x0d, 0x0a, 0x51,
+            0x55, 0x49, 0x54, 0x0a, /* End of v2 signature */
+            0x21, 0x11, 0x00, 0x1c, /* ver_cmd, fam and len (28) */
+            0xc0, 0xa8, 0x0a, 0x64, /* Source IP */
+            0xc0, 0xa8, 0x0b, 0x5a, /* Destination IP */
+            0xa5, 0x5c, 0x1f, 0x90, /* Source port, Destination port */
+            0x20, 0x00, 0x0d,       /* PP2_TYPE_SSL TLV with length 13 */
+            0x01,                   /* client (PP2_CLIENT_SSL set) */
+            0x00, 0x00, 0x00, 0x00, /* verify (0 = verified) */
+            0x21, 0x00, 0x03,       /* PP2_SUBTYPE_SSL_VERSION, length 3 */
+            0x31, 0x2e, 0x32,       /* "1.2" */
+            0xff, 0xff,             /* 2 trailing orphan bytes (not a valid sub-TLV header) */
+};
+
 static uint8_t pp_add_tlvs(pp_info_t *pp_info, const test_tlv_t (*add_tlvs)[10])
 {
     uint8_t i;
@@ -391,14 +433,14 @@ int main(void)
         {
             .name = "v1 PROXY protocol header: UNKNOWN - short",
             .raw_bytes_in = (const uint8_t*) "PROXY UNKNOWN\r\n",
-            .raw_bytes_in_length = strlen((const char*) tests[0].raw_bytes_in),
-            .rc_expected = strlen((const char*) tests[0].raw_bytes_in),
+            .raw_bytes_in_length = (uint32_t) strlen((const char*) tests[0].raw_bytes_in),
+            .rc_expected = (int32_t) strlen((const char*) tests[0].raw_bytes_in),
         },
         {
             .name = "v1 PROXY protocol header: UNKNOWN - full",
             .raw_bytes_in = (const uint8_t*) "PROXY UNKNOWN ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff 65535 65535\r\n",
-            .raw_bytes_in_length = strlen((const char*) tests[1].raw_bytes_in),
-            .rc_expected = strlen((const char*) tests[1].raw_bytes_in),
+            .raw_bytes_in_length = (uint32_t) strlen((const char*) tests[1].raw_bytes_in),
+            .rc_expected = (int32_t) strlen((const char*) tests[1].raw_bytes_in),
         },
         {
             .name = "v2 PROXY protocol header: PROXY, TCP over IPv4. TLVs: PP2_TYPE_CRC32C, PP2_TYPE_AWS(PP2_SUBTYPE_AWS_VPCE_ID)",
@@ -869,6 +911,93 @@ int main(void)
             },
             .error_expected = -ERR_PP2_IPV6_DST_IP,
         },
+        {
+            .name = "v2 PROXY protocol header: -ERR_PP2_TLV_LENGTH (TLV length overflow)",
+            .raw_bytes_in = pp2_hdr_tlv_overflow,
+            .raw_bytes_in_length = sizeof(pp2_hdr_tlv_overflow),
+            .rc_expected = -ERR_PP2_TLV_LENGTH,
+            .pp_info_out_expected = {
+                .address_family = ADDR_FAMILY_INET,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
+                .src_addr = "192.168.10.100",
+                .dst_addr = "192.168.11.90",
+                .src_port = 42332,
+                .dst_port = 8080,
+            },
+        },
+        {
+            .name = "v2 PROXY protocol header: -ERR_PP2_TYPE_SSL (SSL TLV too short)",
+            .raw_bytes_in = pp2_hdr_ssl_too_short,
+            .raw_bytes_in_length = sizeof(pp2_hdr_ssl_too_short),
+            .rc_expected = -ERR_PP2_TYPE_SSL,
+            .pp_info_out_expected = {
+                .address_family = ADDR_FAMILY_INET,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
+                .src_addr = "192.168.10.100",
+                .dst_addr = "192.168.11.90",
+                .src_port = 42332,
+                .dst_port = 8080,
+            },
+        },
+        {
+            .name = "v2 PROXY protocol header: -ERR_PP2_TYPE_SSL (SSL sub-TLV trailing bytes)",
+            .raw_bytes_in = pp2_hdr_ssl_trailing_bytes,
+            .raw_bytes_in_length = sizeof(pp2_hdr_ssl_trailing_bytes),
+            .rc_expected = -ERR_PP2_TYPE_SSL,
+            .pp_info_out_expected = {
+                .address_family = ADDR_FAMILY_INET,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
+                .src_addr = "192.168.10.100",
+                .dst_addr = "192.168.11.90",
+                .src_port = 42332,
+                .dst_port = 8080,
+                .pp2_info = {
+                    .pp2_ssl_info = {
+                        .ssl = 1,
+                        .cert_verified = 1,
+                    },
+                },
+            },
+        },
+        {
+            .name = "v1 PROXY protocol header: -ERR_PP1_TRANSPORT_FAMILY (invalid family, 15-byte header)",
+            .raw_bytes_in = (const uint8_t*) "PROXY XXXXXXX\r\n",
+            .raw_bytes_in_length = 15,
+            .rc_expected = -ERR_PP1_TRANSPORT_FAMILY,
+        },
+        {
+            .name = "v1 PROXY protocol header: -ERR_PP1_CRLF (buffer >= 108 bytes, no CRLF)",
+            .raw_bytes_in = (const uint8_t*)
+                            "PROXY TCP4 255.255.255.255 255.255.255.255 65535 65535 "  /* 55 */
+                            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",    /* 53, total 108 */
+            .raw_bytes_in_length = 108,
+            .rc_expected = -ERR_PP1_CRLF,
+        },
+        {
+            .name = "v1 PROXY protocol header: -ERR_PP1_SRC_PORT (+ prefix)",
+            .raw_bytes_in = (const uint8_t*) "PROXY TCP4 1.2.3.4 5.6.7.8 +80 443\r\n",
+            .raw_bytes_in_length = 36,
+            .rc_expected = -ERR_PP1_SRC_PORT,
+            .pp_info_out_expected = {
+                .address_family = ADDR_FAMILY_INET,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
+                .src_addr = "1.2.3.4",
+                .dst_addr = "5.6.7.8",
+            },
+        },
+        {
+            .name = "v1 PROXY protocol header: -ERR_PP1_DST_PORT (trailing garbage)",
+            .raw_bytes_in = (const uint8_t*) "PROXY TCP4 1.2.3.4 5.6.7.8 80 443a\r\n",
+            .raw_bytes_in_length = 36,
+            .rc_expected = -ERR_PP1_DST_PORT,
+            .pp_info_out_expected = {
+                .address_family = ADDR_FAMILY_INET,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
+                .src_addr = "1.2.3.4",
+                .dst_addr = "5.6.7.8",
+                .src_port = 80,
+            },
+        },
     };
 
     /* Run tests */
@@ -889,6 +1018,7 @@ int main(void)
             }
             memcpy(buffer, tests[i].raw_bytes_in, tests[i].raw_bytes_in_length);
             pp_parse_hdr_rc = pp_parse_hdr(buffer, tests[i].raw_bytes_in_length, &pp_info_out);
+            free(buffer);
         }
         else
         {
@@ -952,6 +1082,44 @@ int main(void)
         pp_info_clear(&pp_info_out);
         printf("PASSED\n");
     }
+
+    /* Test pp_info_add_* validation failures */
+    printf("Running test: pp_info_add_unique_id length > 128...");
+    {
+        pp_info_t pp_info = { 0 };
+        uint8_t dummy = 0;
+        if (pp_info_add_unique_id(&pp_info, 129, &dummy) != 0)
+        {
+            printf("FAILED\n");
+            return EXIT_FAILURE;
+        }
+        pp_info_clear(&pp_info);
+    }
+    printf("PASSED\n");
+
+    printf("Running test: pp_info_add_netns NULL...");
+    {
+        pp_info_t pp_info = { 0 };
+        if (pp_info_add_netns(&pp_info, NULL) != 0)
+        {
+            printf("FAILED\n");
+            return EXIT_FAILURE;
+        }
+        pp_info_clear(&pp_info);
+    }
+    printf("PASSED\n");
+
+    printf("Running test: pp_info_add_aws_vpce_id NULL...");
+    {
+        pp_info_t pp_info = { 0 };
+        if (pp_info_add_aws_vpce_id(&pp_info, NULL) != 0)
+        {
+            printf("FAILED\n");
+            return EXIT_FAILURE;
+        }
+        pp_info_clear(&pp_info);
+    }
+    printf("PASSED\n");
 
     /* Test pp_strerror() */
     printf("Running test: pp_strerror()...");
