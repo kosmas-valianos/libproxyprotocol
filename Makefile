@@ -16,7 +16,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 
-CFLAGS := -Wall -Wextra -Wshadow -ansi -fshort-enums -fpic
+CFLAGS := -Wall -Wextra -Wshadow -fshort-enums -fpic
 
 all: build tests example
 
@@ -26,28 +26,28 @@ libs_dir:
 	mkdir -p libs
 
 libs/libproxyprotocol.so: src/proxy_protocol.o
-	$(CC) -shared -o $@ $+
+	$(CC) -shared -o $@ src/proxy_protocol.o
 
 src/proxy_protocol.o: src/proxy_protocol.c src/proxy_protocol.h
-	$(CC) ${CFLAGS} -pedantic -c -o $@ $<
-
-src/.o: %.c src/proxy_protocol.h
-	$(CC) ${CFLAGS} -c -o $@ $<
+	$(CC) ${CFLAGS} -c -o $@ src/proxy_protocol.c
 
 tests: tests/test_libproxyprotocol
-	LD_LIBRARY_PATH=libs/ $<
+	LD_LIBRARY_PATH=libs/ tests/test_libproxyprotocol
 
 tests/test_libproxyprotocol: tests/test.o libs/libproxyprotocol.so
-	$(CC) -Llibs/ ${CFLAGS} -o $@ $< -lproxyprotocol
+	$(CC) -Llibs/ ${CFLAGS} -o $@ tests/test.o -lproxyprotocol
+
+tests/test.o: tests/test.c src/proxy_protocol.h
+	$(CC) ${CFLAGS} -c -o $@ tests/test.c
 
 example: examples/client_server
-	LD_LIBRARY_PATH=libs/ $<
+	LD_LIBRARY_PATH=libs/ examples/client_server
 
 examples/client_server: examples/client_server.o libs/libproxyprotocol.so
-	$(CC) -Llibs/ ${CFLAGS} -o $@ $< -lproxyprotocol
+	$(CC) -Llibs/ ${CFLAGS} -o $@ examples/client_server.o -lproxyprotocol
 
-examples/client_server.o: examples/client_server.c
-	$(CC) ${CFLAGS} -pedantic -c -o $@ $<
+examples/client_server.o: examples/client_server.c src/proxy_protocol.h
+	$(CC) ${CFLAGS} -c -o $@ examples/client_server.c
 
 clean:
 	$(RM) src/*.o libs/libproxyprotocol.so

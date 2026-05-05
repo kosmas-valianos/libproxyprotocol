@@ -5,6 +5,9 @@
     #include <ws2tcpip.h>
     #pragma comment(lib, "ws2_32.lib")
 #else
+    #include <sys/types.h>
+    #include <sys/socket.h>
+    #include <netinet/in.h>
     #include <arpa/inet.h>
 #endif
 
