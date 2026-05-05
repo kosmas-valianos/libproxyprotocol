@@ -24,6 +24,9 @@
     /* Caution: To be used only with fixed length arrays */
     #define _sprintf(buffer, format, ...) sprintf_s(buffer, sizeof(buffer), format, __VA_ARGS__)
 #else
+    #include <sys/types.h>
+    #include <sys/socket.h>
+    #include <netinet/in.h>
     #include <arpa/inet.h>
     #include <stdarg.h>
     /* vsprintf() and vargs as snprintf and __VA_ARGS__ do not exist in ANSI C */
