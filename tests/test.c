@@ -1222,6 +1222,92 @@ int main(void)
     }
     printf("PASSED\n");
 
+    /* Regression: alignment_power >= 16 used to make 1 << power overflow the
+     * uint16_t alignment (division by zero / signed overflow). It must now be
+     * rejected with -ERR_PP2_LENGTH instead of crashing. */
+    printf("Running test: pp_create_hdr rejects oversized alignment_power...");
+    {
+        unsigned char powers[] = { 16, 31, 255 };
+        size_t k;
+        for (k = 0; k < sizeof(powers); k++)
+        {
+            pp_info_t pp_info = { 0 };
+            uint16_t pp_hdr_len = 0;
+            int32_t error = ERR_NULL;
+            uint8_t *pp_hdr;
+            pp_info.address_family = ADDR_FAMILY_INET;
+            pp_info.transport_protocol = TRANSPORT_PROTOCOL_STREAM;
+            strcpy(pp_info.src_addr, "1.2.3.4");
+            strcpy(pp_info.dst_addr, "5.6.7.8");
+            pp_info.src_port = 80;
+            pp_info.dst_port = 443;
+            pp_info.pp2_info.alignment_power = powers[k];
+            pp_hdr = pp_create_hdr(2, &pp_info, &pp_hdr_len, &error);
+            if (pp_hdr || error != -ERR_PP2_LENGTH)
+            {
+                printf("FAILED\n");
+                free(pp_hdr);
+                pp_info_clear(&pp_info);
+                return EXIT_FAILURE;
+            }
+            pp_info_clear(&pp_info);
+        }
+    }
+    printf("PASSED\n");
+
+    /* Regression: a large TLV makes the padded header length round up to the
+     * next multiple of alignment, which can hit 65536 and wrap to 0 in the old
+     * uint16_t computation -> undersized malloc + heap overflow on TLV copy.
+     * Both a small alignment_power (next multiple just above UINT16_MAX) and
+     * power 15 (header > 32768) reach the wrap. It must now be rejected. */
+    printf("Running test: pp_create_hdr rejects alignment padding overflow...");
+    {
+        struct { uint16_t value_len; unsigned char power; } cases[] = {
+            { 65514, 2 },
+            { 40000, 15 }
+        };
+        size_t k;
+        for (k = 0; k < sizeof(cases) / sizeof(cases[0]); k++)
+        {
+            pp_info_t pp_info = { 0 };
+            uint16_t pp_hdr_len = 0;
+            int32_t error = ERR_NULL;
+            uint8_t *pp_hdr;
+            uint8_t *host_name = malloc(cases[k].value_len);
+            if (!host_name)
+            {
+                printf("FAILED\n");
+                return EXIT_FAILURE;
+            }
+            memset(host_name, 'a', cases[k].value_len);
+            pp_info.address_family = ADDR_FAMILY_INET;
+            pp_info.transport_protocol = TRANSPORT_PROTOCOL_STREAM;
+            strcpy(pp_info.src_addr, "1.2.3.4");
+            strcpy(pp_info.dst_addr, "5.6.7.8");
+            pp_info.src_port = 80;
+            pp_info.dst_port = 443;
+            pp_info.pp2_info.alignment_power = cases[k].power;
+            if (!pp_info_add_authority(&pp_info, cases[k].value_len, host_name))
+            {
+                printf("FAILED\n");
+                free(host_name);
+                pp_info_clear(&pp_info);
+                return EXIT_FAILURE;
+            }
+            free(host_name);
+            pp_hdr = pp_create_hdr(2, &pp_info, &pp_hdr_len, &error);
+            if (pp_hdr || error != -ERR_PP2_LENGTH)
+            {
+                printf("FAILED\n");
+                free(pp_hdr);
+                pp_info_clear(&pp_info);
+                return EXIT_FAILURE;
+            }
+            pp_info_clear(&pp_info);
+        }
+    }
+    printf("PASSED\n");
+
     printf("All tests completed successfully\n");
     return EXIT_SUCCESS;
 }

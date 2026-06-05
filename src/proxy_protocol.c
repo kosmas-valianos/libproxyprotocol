@@ -799,20 +799,37 @@ static uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, 
         return NULL;
     }
     *pp2_hdr_len = (uint16_t)(sizeof(proxy_hdr_v2_t) + len);
+    /* Cap at 15: a header length is a uint16_t, so a larger power would
+     * overflow the 1 << power shift (1 << 16 wraps to 0 -> division by zero,
+     * 1 << 31 is signed overflow) and could never fit the header anyway */
+    if (pp_info->pp2_info.alignment_power > 15)
+    {
+        *error = -ERR_PP2_LENGTH;
+        return NULL;
+    }
     if (pp_info->pp2_info.alignment_power > 1)
     {
         uint16_t alignment = 1 << pp_info->pp2_info.alignment_power;
         if (*pp2_hdr_len % alignment)
         {
-            uint16_t pp2_hdr_len_padded = (*pp2_hdr_len / alignment + 1) * alignment;
+            /* Compute the padded length in a wider type: the next multiple of
+             * alignment can be 65536 (e.g. power 15 with a header > 32768, or any
+             * power when the header is close to UINT16_MAX), which would wrap to 0
+             * in a uint16_t and drive an undersized malloc -> heap overflow */
+            uint32_t pp2_hdr_len_padded = (*pp2_hdr_len / alignment + 1) * alignment;
             /* The NOOP TLV needs to be at least 3 bytes because a TLV can not be smaller than that */
             if (pp2_hdr_len_padded - *pp2_hdr_len < sizeof_pp2_tlv_t)
             {
                 pp2_hdr_len_padded += alignment;
             }
-            padding_bytes = pp2_hdr_len_padded - (uint16_t)sizeof(proxy_hdr_v2_t) - (uint16_t)len - sizeof_pp2_tlv_t;
+            if (pp2_hdr_len_padded > UINT16_MAX)
+            {
+                *error = -ERR_PP2_LENGTH;
+                return NULL;
+            }
+            padding_bytes = (uint16_t)(pp2_hdr_len_padded - sizeof(proxy_hdr_v2_t) - len - sizeof_pp2_tlv_t);
 
-            *pp2_hdr_len = pp2_hdr_len_padded;
+            *pp2_hdr_len = (uint16_t)pp2_hdr_len_padded;
             len = pp2_hdr_len_padded - (uint32_t)sizeof(proxy_hdr_v2_t);
         }
     }
