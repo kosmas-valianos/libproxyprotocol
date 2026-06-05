@@ -218,6 +218,20 @@ uint8_t pp2_hdr_ssl_trailing_bytes[] = {
             0xff, 0xff,             /* 2 trailing orphan bytes (not a valid sub-TLV header) */
 };
 
+/* v2 header whose last TLV is a US-ASCII NETNS TLV occupying the final byte of
+ * the buffer (regression for the 1-byte OOB read while parsing US-ASCII TLVs) */
+uint8_t pp2_hdr_usascii_tlv_at_end[] = {
+            0x0d, 0x0a, 0x0d, 0x0a, /* Start of v2 signature */
+            0x00, 0x0d, 0x0a, 0x51,
+            0x55, 0x49, 0x54, 0x0a, /* End of v2 signature */
+            0x21, 0x11, 0x00, 0x10, /* ver_cmd, fam and len (16) */
+            0xc0, 0xa8, 0x0a, 0x64, /* Source IP */
+            0xc0, 0xa8, 0x0b, 0x5a, /* Destination IP */
+            0xa5, 0x5c, 0x1f, 0x90, /* Source port, Destination port */
+            0x30, 0x00, 0x01,       /* PP2_TYPE_NETNS TLV with length 1 */
+            0x41,                   /* "A" - last byte of the buffer */
+};
+
 static uint8_t pp_add_tlvs(pp_info_t *pp_info, const test_tlv_t (*add_tlvs)[10])
 {
     uint8_t i;
@@ -1001,6 +1015,23 @@ int main(void)
                 .src_port = 80,
             },
         },
+        {
+            .name = "v2 PROXY protocol header: US-ASCII TLV at end of buffer (no OOB read)",
+            .raw_bytes_in = pp2_hdr_usascii_tlv_at_end,
+            .raw_bytes_in_length = sizeof(pp2_hdr_usascii_tlv_at_end),
+            .rc_expected = sizeof(pp2_hdr_usascii_tlv_at_end),
+            .pp_info_out_expected = {
+                .address_family = ADDR_FAMILY_INET,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
+                .src_addr = "192.168.10.100",
+                .dst_addr = "192.168.11.90",
+                .src_port = 42332,
+                .dst_port = 8080,
+            },
+            .expected_tlvs = {
+                { .type = PP2_TYPE_NETNS, .value_len = 2, .value = (const uint8_t*) "A" },
+            },
+        },
     };
 
     /* Run tests */
@@ -1132,6 +1163,62 @@ int main(void)
     {
         printf("FAILED\n");
         return EXIT_FAILURE;
+    }
+    printf("PASSED\n");
+
+    /* Regression: v1 create from a 45-char IPv4-mapped IPv6 address used to
+     * overflow the line buffer; it must now succeed and round-trip */
+    printf("Running test: v1 create with 45-char IPv4-mapped IPv6 addresses...");
+    {
+        const char *mixed_src = "ffff:ffff:ffff:ffff:ffff:ffff:255.255.255.255";
+        const char *mixed_dst = "1111:2222:3333:4444:5555:6666:127.0.0.1";
+        char norm_src[INET6_ADDRSTRLEN] = { 0 };
+        char norm_dst[INET6_ADDRSTRLEN] = { 0 };
+        struct in6_addr bin;
+        pp_info_t pp_info_in = { 0 };
+        pp_info_t pp_info_out = { 0 };
+        uint16_t pp_hdr_len = 0;
+        int32_t error = ERR_NULL;
+        uint8_t *pp_hdr = NULL;
+        int32_t parse_rc;
+
+        if (inet_pton(AF_INET6, mixed_src, &bin) != 1
+            || !inet_ntop(AF_INET6, &bin, norm_src, sizeof(norm_src))
+            || inet_pton(AF_INET6, mixed_dst, &bin) != 1
+            || !inet_ntop(AF_INET6, &bin, norm_dst, sizeof(norm_dst)))
+        {
+            printf("FAILED\n");
+            return EXIT_FAILURE;
+        }
+
+        pp_info_in.address_family = ADDR_FAMILY_INET6;
+        pp_info_in.transport_protocol = TRANSPORT_PROTOCOL_STREAM;
+        strcpy(pp_info_in.src_addr, mixed_src);
+        strcpy(pp_info_in.dst_addr, mixed_dst);
+        pp_info_in.src_port = 65535;
+        pp_info_in.dst_port = 65535;
+
+        pp_hdr = pp_create_hdr(1, &pp_info_in, &pp_hdr_len, &error);
+        if (!pp_hdr || error != ERR_NULL)
+        {
+            printf("FAILED\n");
+            return EXIT_FAILURE;
+        }
+        parse_rc = pp_parse_hdr(pp_hdr, pp_hdr_len, &pp_info_out);
+        if (parse_rc != pp_hdr_len
+            || pp_info_out.address_family != ADDR_FAMILY_INET6
+            || pp_info_out.src_port != 65535
+            || pp_info_out.dst_port != 65535
+            || strcmp(pp_info_out.src_addr, norm_src)
+            || strcmp(pp_info_out.dst_addr, norm_dst))
+        {
+            printf("FAILED\n");
+            pp_info_clear(&pp_info_out);
+            free(pp_hdr);
+            return EXIT_FAILURE;
+        }
+        pp_info_clear(&pp_info_out);
+        free(pp_hdr);
     }
     printf("PASSED\n");
 

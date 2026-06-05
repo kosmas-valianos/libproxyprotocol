@@ -228,9 +228,15 @@ static uint8_t parse_port(const char *value, uint16_t *usport)
     return 1;
 }
 
-static pp2_tlv_t *tlv_new(uint8_t type, uint16_t length, const void *value)
+static pp2_tlv_t *tlv_new(uint8_t type, uint16_t length, uint16_t copy_length, const void *value)
 {
-    pp2_tlv_t *tlv = malloc(sizeof_pp2_tlv_t + length);
+    pp2_tlv_t *tlv;
+    /* Never copy more than the allocated length bytes */
+    if (copy_length > length)
+    {
+        copy_length = length;
+    }
+    tlv = malloc(sizeof_pp2_tlv_t + length);
     if (!tlv)
     {
         return NULL;
@@ -238,7 +244,7 @@ static pp2_tlv_t *tlv_new(uint8_t type, uint16_t length, const void *value)
     tlv->type = type;
     tlv->length_hi = length >> 8;
     tlv->length_lo = length & 0x00ff;
-    memcpy(tlv->value, value, length);
+    memcpy(tlv->value, value, copy_length);
     return tlv;
 }
 
@@ -274,7 +280,7 @@ static uint8_t tlv_array_append_tlv(tlv_array_t *tlv_array, pp2_tlv_t *tlv)
 
 static uint8_t tlv_array_append_tlv_new(tlv_array_t *tlv_array, uint8_t type, uint16_t length, const void *value)
 {
-    pp2_tlv_t *tlv = tlv_new(type, length, value);
+    pp2_tlv_t *tlv = tlv_new(type, length, length, value);
     if (!tlv)
     {
         return 0;
@@ -294,7 +300,8 @@ static uint8_t tlv_array_append_tlv_new_usascii(tlv_array_t *tlv_array, uint8_t 
     {
         return 0;
     }
-    tlv = tlv_new(type, length + 1, value);
+    /* Allocate length + 1 for the trailing NUL but copy only length bytes */
+    tlv = tlv_new(type, length + 1, length, value);
     if (!tlv)
     {
         return 0;
@@ -887,40 +894,49 @@ static uint8_t *pp1_create_hdr(const pp_info_t *pp_info, uint16_t *pp1_hdr_len, 
     }
     else if (pp_info->address_family == ADDR_FAMILY_INET || pp_info->address_family == ADDR_FAMILY_INET6)
     {
-        char src_addr[39+1];
-        char dst_addr[39+1];
+        char src_addr[INET6_ADDRSTRLEN];
+        char dst_addr[INET6_ADDRSTRLEN];
         const char *fam = pp_info->address_family == ADDR_FAMILY_INET ? "TCP4" : "TCP6";
-        if (pp_info->address_family == ADDR_FAMILY_INET)
+        int af = pp_info->address_family == ADDR_FAMILY_INET ? AF_INET : AF_INET6;
+        int written;
+        struct in6_addr src_bin, dst_bin;
+
+        if (inet_pton(af, pp_info->src_addr, &src_bin) != 1)
         {
-            struct in_addr in;
-            if (inet_pton(AF_INET, pp_info->src_addr, &in) != 1)
-            {
-                *error = -ERR_PP1_IPV4_SRC_IP;
-                return NULL;
-            }
-            if (inet_pton(AF_INET, pp_info->dst_addr, &in) != 1)
-            {
-                *error = -ERR_PP1_IPV4_DST_IP;
-                return NULL;
-            }
+            *error = af == AF_INET ? -ERR_PP1_IPV4_SRC_IP : -ERR_PP1_IPV6_SRC_IP;
+            return NULL;
         }
-        else if (pp_info->address_family == ADDR_FAMILY_INET6)
+        if (inet_pton(af, pp_info->dst_addr, &dst_bin) != 1)
         {
-            struct in6_addr in6;
-            if (inet_pton(AF_INET6, pp_info->src_addr, &in6) != 1)
-            {
-                *error = -ERR_PP1_IPV6_SRC_IP;
-                return NULL;
-            }
-            if (inet_pton(AF_INET6, pp_info->dst_addr, &in6) != 1)
-            {
-                *error = -ERR_PP1_IPV6_DST_IP;
-                return NULL;
-            }
+            *error = af == AF_INET ? -ERR_PP1_IPV4_DST_IP : -ERR_PP1_IPV6_DST_IP;
+            return NULL;
         }
-        memcpy(src_addr, pp_info->src_addr, sizeof(src_addr));
-        memcpy(dst_addr, pp_info->dst_addr, sizeof(dst_addr));
-        *pp1_hdr_len = (uint16_t)_sprintf(block, "PROXY %s %s %s %hu %hu"CRLF, fam, src_addr, dst_addr, pp_info->src_port, pp_info->dst_port);
+
+        /* Normalise via inet_ntop() so the textual form stays canonical (<= 39 chars) and within the PROXY v1 line limit */
+        if (!inet_ntop(af, &src_bin, src_addr, sizeof(src_addr)))
+        {
+            *error = af == AF_INET ? -ERR_PP1_IPV4_SRC_IP : -ERR_PP1_IPV6_SRC_IP;
+            return NULL;
+        }
+        if (!inet_ntop(af, &dst_bin, dst_addr, sizeof(dst_addr)))
+        {
+            *error = af == AF_INET ? -ERR_PP1_IPV4_DST_IP : -ERR_PP1_IPV6_DST_IP;
+            return NULL;
+        }
+
+        /* 27 = "PROXY " + "TCPx"(4) + 3 spaces + 2 ports(<=5) + "\r\n" + NUL */
+        if (strlen(src_addr) + strlen(dst_addr) + 27 > sizeof(block))
+        {
+            *error = -ERR_PP1_TRANSPORT_FAMILY;
+            return NULL;
+        }
+        written = _sprintf(block, "PROXY %s %s %s %hu %hu"CRLF, fam, src_addr, dst_addr, pp_info->src_port, pp_info->dst_port);
+        if (written <= 0 || (size_t)written >= sizeof(block))
+        {
+            *error = -ERR_PP1_TRANSPORT_FAMILY;
+            return NULL;
+        }
+        *pp1_hdr_len = (uint16_t)written;
     }
     else
     {
