@@ -941,7 +941,7 @@ static uint8_t *pp1_create_hdr(const pp_info_t *pp_info, uint16_t *pp1_hdr_len, 
             return NULL;
         }
 
-        /* 27 = "PROXY " + "TCPx"(4) + 3 spaces + 2 ports(<=5) + "\r\n" + NUL */
+        /* 27 = "PROXY " + "TCPx"(4) + 4 spaces + 2 ports(<=5) + "\r\n" + NUL */
         if (strlen(src_addr) + strlen(dst_addr) + 27 > sizeof(block))
         {
             *error = -ERR_PP1_TRANSPORT_FAMILY;
