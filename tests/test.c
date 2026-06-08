@@ -482,7 +482,7 @@ int main(void)
                 {
                     .type = PP2_TYPE_AWS,
                     .subtype = PP2_SUBTYPE_AWS_VPCE_ID,
-                    .value_len = 23,
+                    .value_len = 22,
                     .value = (const uint8_t*) "vpce-23d8ezjk38bchilm4"
                 },
             },
@@ -586,7 +586,7 @@ int main(void)
             .add_tlvs = {
                 {
                 .type = PP2_SUBTYPE_SSL_VERSION,
-                    .value_len = 8,
+                    .value_len = 7,
                     .value = (const uint8_t*) "TLSv1.2"
                 },
                 {
@@ -596,23 +596,23 @@ int main(void)
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_CIPHER,
-                    .value_len = 28,
+                    .value_len = 27,
                     .value = (const uint8_t*) "ECDHE-RSA-AES128-GCM-SHA256"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_SIG_ALG,
-                    .value_len = 7,
+                    .value_len = 6,
                     .value = (const uint8_t*) "SHA256"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_KEY_ALG,
-                    .value_len = 8,
+                    .value_len = 7,
                     .value = (const uint8_t*) "RSA2048"
                 },
                 {
                     .type = PP2_TYPE_AWS,
                     .subtype = PP2_SUBTYPE_AWS_VPCE_ID,
-                    .value_len = 24,
+                    .value_len = 23,
                     .value = (const uint8_t*) "vpce-24d8ezjk38bchilm4m"
                 },
                 {
@@ -648,7 +648,7 @@ int main(void)
             .expected_tlvs = {
                 {
                     .type = PP2_SUBTYPE_SSL_VERSION,
-                    .value_len = 8,
+                    .value_len = 7,
                     .value = (const uint8_t*) "TLSv1.2"
                 },
                 {
@@ -658,17 +658,17 @@ int main(void)
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_CIPHER,
-                    .value_len = 28,
+                    .value_len = 27,
                     .value = (const uint8_t*) "ECDHE-RSA-AES128-GCM-SHA256"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_SIG_ALG,
-                    .value_len = 7,
+                    .value_len = 6,
                     .value = (const uint8_t*) "SHA256"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_KEY_ALG,
-                    .value_len = 8,
+                    .value_len = 7,
                     .value = (const uint8_t*) "RSA2048"
                 },
             },
@@ -699,7 +699,7 @@ int main(void)
             .add_tlvs = {
                 {
                     .type = PP2_SUBTYPE_SSL_VERSION,
-                    .value_len = 8,
+                    .value_len = 7,
                     .value = (const uint8_t*) "TLSv1.3"
                 },
                 {
@@ -709,27 +709,27 @@ int main(void)
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_CIPHER,
-                    .value_len = 23,
+                    .value_len = 22,
                     .value = (const uint8_t*) "TLS_AES_256_GCM_SHA384"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_SIG_ALG,
-                    .value_len = 7,
+                    .value_len = 6,
                     .value = (const uint8_t*) "SHA384"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_KEY_ALG,
-                    .value_len = 8,
+                    .value_len = 7,
                     .value = (const uint8_t*) "RSA4096"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_GROUP,
-                    .value_len = 10,
+                    .value_len = 9,
                     .value = (const uint8_t*) "secp256r1"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_SIG_SCHEME,
-                    .value_len = 20,
+                    .value_len = 19,
                     .value = (const uint8_t*) "rsa_pss_rsae_sha256"
                 },
                 {
@@ -773,7 +773,7 @@ int main(void)
                 },
                 {
                     .type = PP2_TYPE_NETNS,
-                    .value_len = 8,
+                    .value_len = 7,
                     .value = (const uint8_t*) "mynetns"
                 },
                 {
@@ -1029,7 +1029,7 @@ int main(void)
                 .dst_port = 8080,
             },
             .expected_tlvs = {
-                { .type = PP2_TYPE_NETNS, .value_len = 2, .value = (const uint8_t*) "A" },
+                { .type = PP2_TYPE_NETNS, .value_len = 1, .value = (const uint8_t*) "A" },
             },
         },
     };
@@ -1172,24 +1172,15 @@ int main(void)
     {
         const char *mixed_src = "ffff:ffff:ffff:ffff:ffff:ffff:255.255.255.255";
         const char *mixed_dst = "1111:2222:3333:4444:5555:6666:127.0.0.1";
-        char norm_src[INET6_ADDRSTRLEN] = { 0 };
-        char norm_dst[INET6_ADDRSTRLEN] = { 0 };
-        struct in6_addr bin;
+        /* RFC 5952 canonical forms the library must normalise the inputs to */
+        const char *norm_src = "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff";
+        const char *norm_dst = "1111:2222:3333:4444:5555:6666:7f00:1";
         pp_info_t pp_info_in = { 0 };
         pp_info_t pp_info_out = { 0 };
         uint16_t pp_hdr_len = 0;
         int32_t error = ERR_NULL;
         uint8_t *pp_hdr = NULL;
         int32_t parse_rc;
-
-        if (inet_pton(AF_INET6, mixed_src, &bin) != 1
-            || !inet_ntop(AF_INET6, &bin, norm_src, sizeof(norm_src))
-            || inet_pton(AF_INET6, mixed_dst, &bin) != 1
-            || !inet_ntop(AF_INET6, &bin, norm_dst, sizeof(norm_dst)))
-        {
-            printf("FAILED\n");
-            return EXIT_FAILURE;
-        }
 
         pp_info_in.address_family = ADDR_FAMILY_INET6;
         pp_info_in.transport_protocol = TRANSPORT_PROTOCOL_STREAM;
@@ -1263,7 +1254,7 @@ int main(void)
     printf("Running test: pp_create_hdr rejects alignment padding overflow...");
     {
         struct { uint16_t value_len; unsigned char power; } cases[] = {
-            { 65514, 2 },
+            { 65504, 2 },
             { 40000, 15 }
         };
         size_t k;
