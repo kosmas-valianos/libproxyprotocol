@@ -812,7 +812,7 @@ static uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, 
     }
     if (pp_info->pp2_info.alignment_power > 1)
     {
-        uint16_t alignment = 1 << pp_info->pp2_info.alignment_power;
+        uint16_t alignment = 1U << pp_info->pp2_info.alignment_power;
         if (*pp2_hdr_len % alignment)
         {
             /* Compute the padded length in a wider type: the next multiple of

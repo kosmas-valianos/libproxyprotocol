@@ -1057,7 +1057,7 @@ int main(void)
         else
         {
             uint16_t pp_hdr_len = 0;
-            uint16_t alignment = 1 << tests[i].pp_info_in.pp2_info.alignment_power;
+            uint16_t alignment = 1U << tests[i].pp_info_in.pp2_info.alignment_power;
             int32_t error = ERR_NULL;
             uint8_t *pp_hdr = NULL;
 
