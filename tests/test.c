@@ -1057,7 +1057,7 @@ int main(void)
         else
         {
             uint16_t pp_hdr_len = 0;
-            uint16_t alignment = 1U << tests[i].pp_info_in.pp2_info.alignment_power;
+            uint16_t alignment = (uint16_t)(1U << tests[i].pp_info_in.pp2_info.alignment_power);
             int32_t error = ERR_NULL;
             uint8_t *pp_hdr = NULL;
 
@@ -1220,7 +1220,7 @@ int main(void)
     {
         unsigned char powers[] = { 16, 31, 255 };
         size_t k;
-        for (k = 0; k < sizeof(powers); k++)
+        for (k = 0; k < NUM_ELEMS(powers); k++)
         {
             pp_info_t pp_info = { 0 };
             uint16_t pp_hdr_len = 0;

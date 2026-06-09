@@ -239,6 +239,10 @@ static pp2_tlv_t *tlv_new(uint8_t type, uint16_t alloc_length, uint16_t value_le
     {
         value_length = alloc_length;
     }
+    if (value == NULL && value_length > 0)
+    {
+        return NULL;
+    }
     tlv = malloc(sizeof_pp2_tlv_t + alloc_length);
     if (!tlv)
     {
@@ -247,7 +251,10 @@ static pp2_tlv_t *tlv_new(uint8_t type, uint16_t alloc_length, uint16_t value_le
     tlv->type = type;
     tlv->length_hi = value_length >> 8;
     tlv->length_lo = value_length & 0x00ff;
-    memcpy(tlv->value, value, value_length);
+    if (value_length > 0)
+    {
+        memcpy(tlv->value, value, value_length);
+    }
     return tlv;
 }
 
@@ -715,6 +722,7 @@ static uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, 
 {
     proxy_hdr_v2_t proxy_hdr_v2 = { PP2_SIG, '\x21', 0, 0 };
     uint16_t proxy_addr_len, padding_bytes, index;
+    uint8_t padding_applied;
     uint32_t len;
     proxy_addr_t proxy_addr;
     const tlv_array_t *tlv_array;
@@ -787,6 +795,7 @@ static uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, 
     len = proxy_addr_len;
     tlv_array = &pp_info->pp2_info.tlv_array;
     padding_bytes = 0;
+    padding_applied = 0;
     for (i = 0; i < tlv_array->len; i++)
     {
         uint16_t tlv_len = sizeof_pp2_tlv_t + (tlv_array->tlvs[i]->length_hi << 8 | tlv_array->tlvs[i]->length_lo);
@@ -812,14 +821,14 @@ static uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, 
     }
     if (pp_info->pp2_info.alignment_power > 1)
     {
-        uint16_t alignment = 1U << pp_info->pp2_info.alignment_power;
+        uint16_t alignment = (uint16_t)(1U << pp_info->pp2_info.alignment_power);
         if (*pp2_hdr_len % alignment)
         {
             /* Compute the padded length in a wider type: the next multiple of
              * alignment can be 65536 (e.g. power 15 with a header > 32768, or any
              * power when the header is close to UINT16_MAX), which would wrap to 0
              * in a uint16_t and drive an undersized malloc -> heap overflow */
-            uint32_t pp2_hdr_len_padded = (*pp2_hdr_len / alignment + 1) * alignment;
+            uint32_t pp2_hdr_len_padded = (((uint32_t)*pp2_hdr_len / (uint32_t)alignment) + 1U) * (uint32_t)alignment;
             /* The NOOP TLV needs to be at least 3 bytes because a TLV can not be smaller than that */
             if (pp2_hdr_len_padded - *pp2_hdr_len < sizeof_pp2_tlv_t)
             {
@@ -831,6 +840,7 @@ static uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, 
                 return NULL;
             }
             padding_bytes = (uint16_t)(pp2_hdr_len_padded - sizeof(proxy_hdr_v2_t) - len - sizeof_pp2_tlv_t);
+            padding_applied = 1;
 
             *pp2_hdr_len = (uint16_t)pp2_hdr_len_padded;
             len = pp2_hdr_len_padded - (uint32_t)sizeof(proxy_hdr_v2_t);
@@ -858,7 +868,7 @@ static uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, 
         memcpy(pp2_hdr + index, tlv_array->tlvs[i], tlv_len);
         index += tlv_len;
     }
-    if (pp_info->pp2_info.alignment_power > 1 && padding_bytes > 0)
+    if (padding_applied)
     {
         pp2_tlv_t tlv = { 0 };
         tlv.type = PP2_TYPE_NOOP;
@@ -942,7 +952,9 @@ static uint8_t *pp1_create_hdr(const pp_info_t *pp_info, uint16_t *pp1_hdr_len, 
             return NULL;
         }
 
-        /* Normalise via inet_ntop() so the textual form stays canonical (<= 39 chars) and within the PROXY v1 line limit */
+        /* Normalise via inet_ntop(): regardless of the input length, the
+         * canonical output is at most 39 chars (full IPv6 hextet form), keeping
+         * the line within the PROXY v1 limit */
         if (!inet_ntop(af, &src_bin, src_addr, sizeof(src_addr)))
         {
             *error = pp1_ip_error(af, 1);
@@ -954,10 +966,13 @@ static uint8_t *pp1_create_hdr(const pp_info_t *pp_info, uint16_t *pp1_hdr_len, 
             return NULL;
         }
 
-        /* 27 = "PROXY " + "TCPx"(4) + 4 spaces + 2 ports(<=5) + "\r\n" + NUL */
+        /* 27 = "PROXY " + "TCPx"(4) + 4 spaces + 2 ports(<=5) + "\r\n" + NUL.
+         * Canonical inet_ntop() output is <= 39 chars each, so this always fits;
+         * the runtime guard stays because _sprintf() is an unbounded vsprintf()
+         * on ANSI C targets (no snprintf() in C89) */
         if (strlen(src_addr) + strlen(dst_addr) + 27 > sizeof(block))
         {
-            *error = -ERR_PP1_TRANSPORT_FAMILY;
+            *error = -ERR_HEAP_ALLOC;
             return NULL;
         }
         /* The bound check above guarantees the line fits, so this only catches a
@@ -965,7 +980,7 @@ static uint8_t *pp1_create_hdr(const pp_info_t *pp_info, uint16_t *pp1_hdr_len, 
         written = _sprintf(block, "PROXY %s %s %s %hu %hu"CRLF, fam, src_addr, dst_addr, pp_info->src_port, pp_info->dst_port);
         if (written <= 0)
         {
-            *error = -ERR_PP1_TRANSPORT_FAMILY;
+            *error = -ERR_HEAP_ALLOC;
             return NULL;
         }
         *pp1_hdr_len = (uint16_t)written;
