@@ -228,17 +228,33 @@ static uint8_t parse_port(const char *value, uint16_t *usport)
     return 1;
 }
 
-static pp2_tlv_t *tlv_new(uint8_t type, uint16_t length, const void *value)
+static pp2_tlv_t *tlv_new(uint8_t type, uint16_t alloc_length, uint16_t value_length, const void *value)
 {
-    pp2_tlv_t *tlv = malloc(sizeof_pp2_tlv_t + length);
+    pp2_tlv_t *tlv;
+    /* value_length is the on-wire TLV length; alloc_length may be larger so the
+     * caller can reserve extra bytes (US-ASCII TLVs add one for a trailing NUL
+     * that is not part of the value and must not be counted in the length field).
+     * Never store/copy more than what was allocated */
+    if (value_length > alloc_length)
+    {
+        value_length = alloc_length;
+    }
+    if (value == NULL && value_length > 0)
+    {
+        return NULL;
+    }
+    tlv = malloc(sizeof_pp2_tlv_t + alloc_length);
     if (!tlv)
     {
         return NULL;
     }
     tlv->type = type;
-    tlv->length_hi = length >> 8;
-    tlv->length_lo = length & 0x00ff;
-    memcpy(tlv->value, value, length);
+    tlv->length_hi = value_length >> 8;
+    tlv->length_lo = value_length & 0x00ff;
+    if (value_length > 0)
+    {
+        memcpy(tlv->value, value, value_length);
+    }
     return tlv;
 }
 
@@ -274,7 +290,7 @@ static uint8_t tlv_array_append_tlv(tlv_array_t *tlv_array, pp2_tlv_t *tlv)
 
 static uint8_t tlv_array_append_tlv_new(tlv_array_t *tlv_array, uint8_t type, uint16_t length, const void *value)
 {
-    pp2_tlv_t *tlv = tlv_new(type, length, value);
+    pp2_tlv_t *tlv = tlv_new(type, length, length, value);
     if (!tlv)
     {
         return 0;
@@ -294,7 +310,8 @@ static uint8_t tlv_array_append_tlv_new_usascii(tlv_array_t *tlv_array, uint8_t 
     {
         return 0;
     }
-    tlv = tlv_new(type, length + 1, value);
+    /* Allocate length + 1 for the trailing NUL but the on-wire TLV length stays length */
+    tlv = tlv_new(type, length + 1, length, value);
     if (!tlv)
     {
         return 0;
@@ -705,6 +722,7 @@ static uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, 
 {
     proxy_hdr_v2_t proxy_hdr_v2 = { PP2_SIG, '\x21', 0, 0 };
     uint16_t proxy_addr_len, padding_bytes, index;
+    uint8_t padding_applied;
     uint32_t len;
     proxy_addr_t proxy_addr;
     const tlv_array_t *tlv_array;
@@ -777,6 +795,7 @@ static uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, 
     len = proxy_addr_len;
     tlv_array = &pp_info->pp2_info.tlv_array;
     padding_bytes = 0;
+    padding_applied = 0;
     for (i = 0; i < tlv_array->len; i++)
     {
         uint16_t tlv_len = sizeof_pp2_tlv_t + (tlv_array->tlvs[i]->length_hi << 8 | tlv_array->tlvs[i]->length_lo);
@@ -792,20 +811,38 @@ static uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, 
         return NULL;
     }
     *pp2_hdr_len = (uint16_t)(sizeof(proxy_hdr_v2_t) + len);
+    /* Cap at 15: a header length is a uint16_t, so a larger power would
+     * overflow the 1 << power shift (1 << 16 wraps to 0 -> division by zero,
+     * 1 << 31 is signed overflow) and could never fit the header anyway */
+    if (pp_info->pp2_info.alignment_power > 15)
+    {
+        *error = -ERR_PP2_LENGTH;
+        return NULL;
+    }
     if (pp_info->pp2_info.alignment_power > 1)
     {
-        uint16_t alignment = 1 << pp_info->pp2_info.alignment_power;
+        uint16_t alignment = (uint16_t)(1U << pp_info->pp2_info.alignment_power);
         if (*pp2_hdr_len % alignment)
         {
-            uint16_t pp2_hdr_len_padded = (*pp2_hdr_len / alignment + 1) * alignment;
+            /* Compute the padded length in a wider type: the next multiple of
+             * alignment can be 65536 (e.g. power 15 with a header > 32768, or any
+             * power when the header is close to UINT16_MAX), which would wrap to 0
+             * in a uint16_t and drive an undersized malloc -> heap overflow */
+            uint32_t pp2_hdr_len_padded = (((uint32_t)*pp2_hdr_len / (uint32_t)alignment) + 1U) * (uint32_t)alignment;
             /* The NOOP TLV needs to be at least 3 bytes because a TLV can not be smaller than that */
             if (pp2_hdr_len_padded - *pp2_hdr_len < sizeof_pp2_tlv_t)
             {
                 pp2_hdr_len_padded += alignment;
             }
-            padding_bytes = pp2_hdr_len_padded - (uint16_t)sizeof(proxy_hdr_v2_t) - (uint16_t)len - sizeof_pp2_tlv_t;
+            if (pp2_hdr_len_padded > UINT16_MAX)
+            {
+                *error = -ERR_PP2_LENGTH;
+                return NULL;
+            }
+            padding_bytes = (uint16_t)(pp2_hdr_len_padded - sizeof(proxy_hdr_v2_t) - len - sizeof_pp2_tlv_t);
+            padding_applied = 1;
 
-            *pp2_hdr_len = pp2_hdr_len_padded;
+            *pp2_hdr_len = (uint16_t)pp2_hdr_len_padded;
             len = pp2_hdr_len_padded - (uint32_t)sizeof(proxy_hdr_v2_t);
         }
     }
@@ -831,7 +868,7 @@ static uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, 
         memcpy(pp2_hdr + index, tlv_array->tlvs[i], tlv_len);
         index += tlv_len;
     }
-    if (pp_info->pp2_info.alignment_power > 1 && padding_bytes > 0)
+    if (padding_applied)
     {
         pp2_tlv_t tlv = { 0 };
         tlv.type = PP2_TYPE_NOOP;
@@ -868,6 +905,16 @@ uint8_t *pp2_create_healthcheck_hdr(uint16_t *pp2_hdr_len, int32_t *error)
     return pp2_create_hdr(&pp_info, pp2_hdr_len, error);
 }
 
+/* Maps an address family + which-address (src/dst) to the matching v1 IP error */
+static int32_t pp1_ip_error(int af, int is_src)
+{
+    if (af == AF_INET)
+    {
+        return is_src ? -ERR_PP1_IPV4_SRC_IP : -ERR_PP1_IPV4_DST_IP;
+    }
+    return is_src ? -ERR_PP1_IPV6_SRC_IP : -ERR_PP1_IPV6_DST_IP;
+}
+
 static uint8_t *pp1_create_hdr(const pp_info_t *pp_info, uint16_t *pp1_hdr_len, int32_t *error)
 {
     char block[PP1_MAX_LENGTH];
@@ -887,40 +934,56 @@ static uint8_t *pp1_create_hdr(const pp_info_t *pp_info, uint16_t *pp1_hdr_len, 
     }
     else if (pp_info->address_family == ADDR_FAMILY_INET || pp_info->address_family == ADDR_FAMILY_INET6)
     {
-        char src_addr[39+1];
-        char dst_addr[39+1];
+        char src_addr[INET6_ADDRSTRLEN];
+        char dst_addr[INET6_ADDRSTRLEN];
         const char *fam = pp_info->address_family == ADDR_FAMILY_INET ? "TCP4" : "TCP6";
-        if (pp_info->address_family == ADDR_FAMILY_INET)
+        int af = pp_info->address_family == ADDR_FAMILY_INET ? AF_INET : AF_INET6;
+        int written;
+        struct in6_addr src_bin, dst_bin;
+
+        if (inet_pton(af, pp_info->src_addr, &src_bin) != 1)
         {
-            struct in_addr in;
-            if (inet_pton(AF_INET, pp_info->src_addr, &in) != 1)
-            {
-                *error = -ERR_PP1_IPV4_SRC_IP;
-                return NULL;
-            }
-            if (inet_pton(AF_INET, pp_info->dst_addr, &in) != 1)
-            {
-                *error = -ERR_PP1_IPV4_DST_IP;
-                return NULL;
-            }
+            *error = pp1_ip_error(af, 1);
+            return NULL;
         }
-        else if (pp_info->address_family == ADDR_FAMILY_INET6)
+        if (inet_pton(af, pp_info->dst_addr, &dst_bin) != 1)
         {
-            struct in6_addr in6;
-            if (inet_pton(AF_INET6, pp_info->src_addr, &in6) != 1)
-            {
-                *error = -ERR_PP1_IPV6_SRC_IP;
-                return NULL;
-            }
-            if (inet_pton(AF_INET6, pp_info->dst_addr, &in6) != 1)
-            {
-                *error = -ERR_PP1_IPV6_DST_IP;
-                return NULL;
-            }
+            *error = pp1_ip_error(af, 0);
+            return NULL;
         }
-        memcpy(src_addr, pp_info->src_addr, sizeof(src_addr));
-        memcpy(dst_addr, pp_info->dst_addr, sizeof(dst_addr));
-        *pp1_hdr_len = (uint16_t)_sprintf(block, "PROXY %s %s %s %hu %hu"CRLF, fam, src_addr, dst_addr, pp_info->src_port, pp_info->dst_port);
+
+        /* Normalise via inet_ntop(): regardless of the input length, the
+         * canonical output is at most 39 chars (full IPv6 hextet form), keeping
+         * the line within the PROXY v1 limit */
+        if (!inet_ntop(af, &src_bin, src_addr, sizeof(src_addr)))
+        {
+            *error = pp1_ip_error(af, 1);
+            return NULL;
+        }
+        if (!inet_ntop(af, &dst_bin, dst_addr, sizeof(dst_addr)))
+        {
+            *error = pp1_ip_error(af, 0);
+            return NULL;
+        }
+
+        /* 27 = "PROXY " + "TCPx"(4) + 4 spaces + 2 ports(<=5) + "\r\n" + NUL.
+         * Canonical inet_ntop() output is <= 39 chars each, so this always fits;
+         * the runtime guard stays because _sprintf() is an unbounded vsprintf()
+         * on ANSI C targets (no snprintf() in C89) */
+        if (strlen(src_addr) + strlen(dst_addr) + 27 > sizeof(block))
+        {
+            *error = -ERR_HEAP_ALLOC;
+            return NULL;
+        }
+        /* The bound check above guarantees the line fits, so this only catches a
+         * _sprintf() error (vsprintf()/sprintf_s() return a negative value) */
+        written = _sprintf(block, "PROXY %s %s %s %hu %hu"CRLF, fam, src_addr, dst_addr, pp_info->src_port, pp_info->dst_port);
+        if (written <= 0)
+        {
+            *error = -ERR_HEAP_ALLOC;
+            return NULL;
+        }
+        *pp1_hdr_len = (uint16_t)written;
     }
     else
     {
@@ -1371,13 +1434,13 @@ static int32_t pp1_parse_hdr(const uint8_t *buffer, uint32_t buffer_length, pp_i
     src_address_end = strchr(ptr, ' ');
     if (!src_address_end)
     {
-        return sa_family == AF_INET ? -ERR_PP1_IPV4_SRC_IP : -ERR_PP1_IPV6_SRC_IP;
+        return pp1_ip_error(sa_family, 1);
     }
     src_address_length = (uint16_t)(src_address_end - ptr);
     memcpy(pp_info->src_addr, ptr, src_address_length);
     if (inet_pton(sa_family, pp_info->src_addr, &src_sin_addr) != 1)
     {
-        return sa_family == AF_INET ? -ERR_PP1_IPV4_SRC_IP : -ERR_PP1_IPV6_SRC_IP;
+        return pp1_ip_error(sa_family, 1);
     }
     ptr += src_address_length;
 
@@ -1392,13 +1455,13 @@ static int32_t pp1_parse_hdr(const uint8_t *buffer, uint32_t buffer_length, pp_i
     dst_address_end = strchr(ptr, ' ');
     if (!dst_address_end)
     {
-        return sa_family == AF_INET ? -ERR_PP1_IPV4_DST_IP : -ERR_PP1_IPV6_DST_IP;
+        return pp1_ip_error(sa_family, 0);
     }
     dst_address_length = (uint16_t)(dst_address_end - ptr);
     memcpy(pp_info->dst_addr, ptr, dst_address_length);
     if (inet_pton(sa_family, pp_info->dst_addr, &dst_sin_addr) != 1)
     {
-        return sa_family == AF_INET ? -ERR_PP1_IPV4_DST_IP : -ERR_PP1_IPV6_DST_IP;
+        return pp1_ip_error(sa_family, 0);
     }
     ptr += dst_address_length;
 

@@ -218,6 +218,20 @@ uint8_t pp2_hdr_ssl_trailing_bytes[] = {
             0xff, 0xff,             /* 2 trailing orphan bytes (not a valid sub-TLV header) */
 };
 
+/* v2 header whose last TLV is a US-ASCII NETNS TLV occupying the final byte of
+ * the buffer (regression for the 1-byte OOB read while parsing US-ASCII TLVs) */
+uint8_t pp2_hdr_usascii_tlv_at_end[] = {
+            0x0d, 0x0a, 0x0d, 0x0a, /* Start of v2 signature */
+            0x00, 0x0d, 0x0a, 0x51,
+            0x55, 0x49, 0x54, 0x0a, /* End of v2 signature */
+            0x21, 0x11, 0x00, 0x10, /* ver_cmd, fam and len (16) */
+            0xc0, 0xa8, 0x0a, 0x64, /* Source IP */
+            0xc0, 0xa8, 0x0b, 0x5a, /* Destination IP */
+            0xa5, 0x5c, 0x1f, 0x90, /* Source port, Destination port */
+            0x30, 0x00, 0x01,       /* PP2_TYPE_NETNS TLV with length 1 */
+            0x41,                   /* "A" - last byte of the buffer */
+};
+
 static uint8_t pp_add_tlvs(pp_info_t *pp_info, const test_tlv_t (*add_tlvs)[10])
 {
     uint8_t i;
@@ -468,7 +482,7 @@ int main(void)
                 {
                     .type = PP2_TYPE_AWS,
                     .subtype = PP2_SUBTYPE_AWS_VPCE_ID,
-                    .value_len = 23,
+                    .value_len = 22,
                     .value = (const uint8_t*) "vpce-23d8ezjk38bchilm4"
                 },
             },
@@ -572,7 +586,7 @@ int main(void)
             .add_tlvs = {
                 {
                 .type = PP2_SUBTYPE_SSL_VERSION,
-                    .value_len = 8,
+                    .value_len = 7,
                     .value = (const uint8_t*) "TLSv1.2"
                 },
                 {
@@ -582,23 +596,23 @@ int main(void)
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_CIPHER,
-                    .value_len = 28,
+                    .value_len = 27,
                     .value = (const uint8_t*) "ECDHE-RSA-AES128-GCM-SHA256"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_SIG_ALG,
-                    .value_len = 7,
+                    .value_len = 6,
                     .value = (const uint8_t*) "SHA256"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_KEY_ALG,
-                    .value_len = 8,
+                    .value_len = 7,
                     .value = (const uint8_t*) "RSA2048"
                 },
                 {
                     .type = PP2_TYPE_AWS,
                     .subtype = PP2_SUBTYPE_AWS_VPCE_ID,
-                    .value_len = 24,
+                    .value_len = 23,
                     .value = (const uint8_t*) "vpce-24d8ezjk38bchilm4m"
                 },
                 {
@@ -634,7 +648,7 @@ int main(void)
             .expected_tlvs = {
                 {
                     .type = PP2_SUBTYPE_SSL_VERSION,
-                    .value_len = 8,
+                    .value_len = 7,
                     .value = (const uint8_t*) "TLSv1.2"
                 },
                 {
@@ -644,17 +658,17 @@ int main(void)
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_CIPHER,
-                    .value_len = 28,
+                    .value_len = 27,
                     .value = (const uint8_t*) "ECDHE-RSA-AES128-GCM-SHA256"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_SIG_ALG,
-                    .value_len = 7,
+                    .value_len = 6,
                     .value = (const uint8_t*) "SHA256"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_KEY_ALG,
-                    .value_len = 8,
+                    .value_len = 7,
                     .value = (const uint8_t*) "RSA2048"
                 },
             },
@@ -685,7 +699,7 @@ int main(void)
             .add_tlvs = {
                 {
                     .type = PP2_SUBTYPE_SSL_VERSION,
-                    .value_len = 8,
+                    .value_len = 7,
                     .value = (const uint8_t*) "TLSv1.3"
                 },
                 {
@@ -695,27 +709,27 @@ int main(void)
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_CIPHER,
-                    .value_len = 23,
+                    .value_len = 22,
                     .value = (const uint8_t*) "TLS_AES_256_GCM_SHA384"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_SIG_ALG,
-                    .value_len = 7,
+                    .value_len = 6,
                     .value = (const uint8_t*) "SHA384"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_KEY_ALG,
-                    .value_len = 8,
+                    .value_len = 7,
                     .value = (const uint8_t*) "RSA4096"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_GROUP,
-                    .value_len = 10,
+                    .value_len = 9,
                     .value = (const uint8_t*) "secp256r1"
                 },
                 {
                     .type = PP2_SUBTYPE_SSL_SIG_SCHEME,
-                    .value_len = 20,
+                    .value_len = 19,
                     .value = (const uint8_t*) "rsa_pss_rsae_sha256"
                 },
                 {
@@ -759,7 +773,7 @@ int main(void)
                 },
                 {
                     .type = PP2_TYPE_NETNS,
-                    .value_len = 8,
+                    .value_len = 7,
                     .value = (const uint8_t*) "mynetns"
                 },
                 {
@@ -1001,6 +1015,23 @@ int main(void)
                 .src_port = 80,
             },
         },
+        {
+            .name = "v2 PROXY protocol header: US-ASCII TLV at end of buffer (no OOB read)",
+            .raw_bytes_in = pp2_hdr_usascii_tlv_at_end,
+            .raw_bytes_in_length = sizeof(pp2_hdr_usascii_tlv_at_end),
+            .rc_expected = sizeof(pp2_hdr_usascii_tlv_at_end),
+            .pp_info_out_expected = {
+                .address_family = ADDR_FAMILY_INET,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
+                .src_addr = "192.168.10.100",
+                .dst_addr = "192.168.11.90",
+                .src_port = 42332,
+                .dst_port = 8080,
+            },
+            .expected_tlvs = {
+                { .type = PP2_TYPE_NETNS, .value_len = 1, .value = (const uint8_t*) "A" },
+            },
+        },
     };
 
     /* Run tests */
@@ -1026,7 +1057,7 @@ int main(void)
         else
         {
             uint16_t pp_hdr_len = 0;
-            uint16_t alignment = 1 << tests[i].pp_info_in.pp2_info.alignment_power;
+            uint16_t alignment = (uint16_t)(1U << tests[i].pp_info_in.pp2_info.alignment_power);
             int32_t error = ERR_NULL;
             uint8_t *pp_hdr = NULL;
 
@@ -1132,6 +1163,139 @@ int main(void)
     {
         printf("FAILED\n");
         return EXIT_FAILURE;
+    }
+    printf("PASSED\n");
+
+    /* Regression: v1 create from a 45-char IPv4-mapped IPv6 address used to
+     * overflow the line buffer; it must now succeed and round-trip */
+    printf("Running test: v1 create with 45-char IPv4-mapped IPv6 addresses...");
+    {
+        const char *mixed_src = "ffff:ffff:ffff:ffff:ffff:ffff:255.255.255.255";
+        const char *mixed_dst = "1111:2222:3333:4444:5555:6666:127.0.0.1";
+        /* RFC 5952 canonical forms the library must normalise the inputs to */
+        const char *norm_src = "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff";
+        const char *norm_dst = "1111:2222:3333:4444:5555:6666:7f00:1";
+        pp_info_t pp_info_in = { 0 };
+        pp_info_t pp_info_out = { 0 };
+        uint16_t pp_hdr_len = 0;
+        int32_t error = ERR_NULL;
+        uint8_t *pp_hdr = NULL;
+        int32_t parse_rc;
+
+        pp_info_in.address_family = ADDR_FAMILY_INET6;
+        pp_info_in.transport_protocol = TRANSPORT_PROTOCOL_STREAM;
+        strcpy(pp_info_in.src_addr, mixed_src);
+        strcpy(pp_info_in.dst_addr, mixed_dst);
+        pp_info_in.src_port = 65535;
+        pp_info_in.dst_port = 65535;
+
+        pp_hdr = pp_create_hdr(1, &pp_info_in, &pp_hdr_len, &error);
+        if (!pp_hdr || error != ERR_NULL)
+        {
+            printf("FAILED\n");
+            return EXIT_FAILURE;
+        }
+        parse_rc = pp_parse_hdr(pp_hdr, pp_hdr_len, &pp_info_out);
+        if (parse_rc != pp_hdr_len
+            || pp_info_out.address_family != ADDR_FAMILY_INET6
+            || pp_info_out.src_port != 65535
+            || pp_info_out.dst_port != 65535
+            || strcmp(pp_info_out.src_addr, norm_src)
+            || strcmp(pp_info_out.dst_addr, norm_dst))
+        {
+            printf("FAILED\n");
+            pp_info_clear(&pp_info_out);
+            free(pp_hdr);
+            return EXIT_FAILURE;
+        }
+        pp_info_clear(&pp_info_out);
+        free(pp_hdr);
+    }
+    printf("PASSED\n");
+
+    /* Regression: alignment_power >= 16 used to make 1 << power overflow the
+     * uint16_t alignment (division by zero / signed overflow). It must now be
+     * rejected with -ERR_PP2_LENGTH instead of crashing. */
+    printf("Running test: pp_create_hdr rejects oversized alignment_power...");
+    {
+        unsigned char powers[] = { 16, 31, 255 };
+        size_t k;
+        for (k = 0; k < NUM_ELEMS(powers); k++)
+        {
+            pp_info_t pp_info = { 0 };
+            uint16_t pp_hdr_len = 0;
+            int32_t error = ERR_NULL;
+            uint8_t *pp_hdr;
+            pp_info.address_family = ADDR_FAMILY_INET;
+            pp_info.transport_protocol = TRANSPORT_PROTOCOL_STREAM;
+            strcpy(pp_info.src_addr, "1.2.3.4");
+            strcpy(pp_info.dst_addr, "5.6.7.8");
+            pp_info.src_port = 80;
+            pp_info.dst_port = 443;
+            pp_info.pp2_info.alignment_power = powers[k];
+            pp_hdr = pp_create_hdr(2, &pp_info, &pp_hdr_len, &error);
+            if (pp_hdr || error != -ERR_PP2_LENGTH)
+            {
+                printf("FAILED\n");
+                free(pp_hdr);
+                pp_info_clear(&pp_info);
+                return EXIT_FAILURE;
+            }
+            pp_info_clear(&pp_info);
+        }
+    }
+    printf("PASSED\n");
+
+    /* Regression: a large TLV makes the padded header length round up to the
+     * next multiple of alignment, which can hit 65536 and wrap to 0 in the old
+     * uint16_t computation -> undersized malloc + heap overflow on TLV copy.
+     * Both a small alignment_power (next multiple just above UINT16_MAX) and
+     * power 15 (header > 32768) reach the wrap. It must now be rejected. */
+    printf("Running test: pp_create_hdr rejects alignment padding overflow...");
+    {
+        struct { uint16_t value_len; unsigned char power; } cases[] = {
+            { 65504, 2 },
+            { 40000, 15 }
+        };
+        size_t k;
+        for (k = 0; k < sizeof(cases) / sizeof(cases[0]); k++)
+        {
+            pp_info_t pp_info = { 0 };
+            uint16_t pp_hdr_len = 0;
+            int32_t error = ERR_NULL;
+            uint8_t *pp_hdr;
+            uint8_t *host_name = malloc(cases[k].value_len);
+            if (!host_name)
+            {
+                printf("FAILED\n");
+                return EXIT_FAILURE;
+            }
+            memset(host_name, 'a', cases[k].value_len);
+            pp_info.address_family = ADDR_FAMILY_INET;
+            pp_info.transport_protocol = TRANSPORT_PROTOCOL_STREAM;
+            strcpy(pp_info.src_addr, "1.2.3.4");
+            strcpy(pp_info.dst_addr, "5.6.7.8");
+            pp_info.src_port = 80;
+            pp_info.dst_port = 443;
+            pp_info.pp2_info.alignment_power = cases[k].power;
+            if (!pp_info_add_authority(&pp_info, cases[k].value_len, host_name))
+            {
+                printf("FAILED\n");
+                free(host_name);
+                pp_info_clear(&pp_info);
+                return EXIT_FAILURE;
+            }
+            free(host_name);
+            pp_hdr = pp_create_hdr(2, &pp_info, &pp_hdr_len, &error);
+            if (pp_hdr || error != -ERR_PP2_LENGTH)
+            {
+                printf("FAILED\n");
+                free(pp_hdr);
+                pp_info_clear(&pp_info);
+                return EXIT_FAILURE;
+            }
+            pp_info_clear(&pp_info);
+        }
     }
     printf("PASSED\n");
 
