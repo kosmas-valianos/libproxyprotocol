@@ -19,27 +19,31 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 #ifdef _WIN32
     #include <ws2tcpip.h>
-    /* Caution: To be used only with fixed length arrays */
-    #define _sprintf(buffer, format, ...) sprintf_s(buffer, sizeof(buffer), format, __VA_ARGS__)
 #else
     #include <sys/types.h>
     #include <sys/socket.h>
     #include <netinet/in.h>
     #include <arpa/inet.h>
-    #include <stdarg.h>
-    /* vsprintf() and vargs as snprintf and __VA_ARGS__ do not exist in ANSI C */
-    static int _sprintf(char *buffer, const char *format, ...)
-    {
-        int n;
-        va_list args;
-        va_start(args, format);
-        n = vsprintf(buffer, format, args);
-        va_end(args);
-        return n;
-    }
 #endif
+
+/* vsprintf() and vargs as snprintf and __VA_ARGS__ do not exist in ANSI C */
+static int _sprintf(char *buffer, size_t size, const char *format, ...)
+{
+    int n;
+    va_list args;
+    va_start(args, format);
+#ifdef _WIN32
+    n = vsprintf_s(buffer, size, format, args);
+#else
+    (void) size;
+    n = vsprintf(buffer, format, args);
+#endif
+    va_end(args);
+    return n;
+}
 
 #include "proxy_protocol.h"
 
@@ -980,8 +984,8 @@ static uint8_t *pp1_create_hdr(const pp_info_t *pp_info, uint16_t *pp1_hdr_len, 
             return NULL;
         }
         /* The bound check above guarantees the line fits, so this only catches a
-         * _sprintf() error (vsprintf()/sprintf_s() return a negative value) */
-        written = _sprintf(block, "PROXY %s %s %s %hu %hu"CRLF, fam, src_addr, dst_addr, pp_info->src_port, pp_info->dst_port);
+         * _sprintf() error (vsprintf()/vsprintf_s() return a negative value) */
+        written = _sprintf(block, sizeof(block), "PROXY %s %s %s %hu %hu"CRLF, fam, src_addr, dst_addr, pp_info->src_port, pp_info->dst_port);
         if (written <= 0)
         {
             *error = -ERR_HEAP_ALLOC;
