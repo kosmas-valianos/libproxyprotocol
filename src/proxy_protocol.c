@@ -30,7 +30,7 @@
 #endif
 
 /* vsprintf() and vargs as snprintf and __VA_ARGS__ do not exist in ANSI C */
-static int _sprintf(char *buffer, size_t size, const char *format, ...)
+static int pp_sprintf(char *buffer, size_t size, const char *format, ...)
 {
     int n;
     va_list args;
@@ -977,7 +977,7 @@ static uint8_t *pp1_create_hdr(const pp_info_t *pp_info, uint16_t *pp1_hdr_len, 
 
         /* 27 = "PROXY " + "TCPx"(4) + 4 spaces + 2 ports(<=5) + "\r\n" + NUL.
          * Canonical inet_ntop() output is <= 39 chars each, so this always fits;
-         * the runtime guard stays because _sprintf() is an unbounded vsprintf()
+         * the runtime guard stays because pp_sprintf() is an unbounded vsprintf()
          * on ANSI C targets (no snprintf() in C89) */
         if (strlen(src_addr) + strlen(dst_addr) + 27 > sizeof(block))
         {
@@ -985,8 +985,8 @@ static uint8_t *pp1_create_hdr(const pp_info_t *pp_info, uint16_t *pp1_hdr_len, 
             return NULL;
         }
         /* The bound check above guarantees the line fits, so this only catches a
-         * _sprintf() error (vsprintf()/vsprintf_s() return a negative value) */
-        written = _sprintf(block, sizeof(block), "PROXY %s %s %s %hu %hu"CRLF, fam, src_addr, dst_addr, pp_info->src_port, pp_info->dst_port);
+         * pp_sprintf() error (vsprintf()/vsprintf_s() return a negative value) */
+        written = pp_sprintf(block, sizeof(block), "PROXY %s %s %s %hu %hu"CRLF, fam, src_addr, dst_addr, pp_info->src_port, pp_info->dst_port);
         if (written <= 0)
         {
             *error = -ERR_HEAP_ALLOC;
