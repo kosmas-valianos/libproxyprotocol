@@ -728,7 +728,7 @@ static uint32_t crc32c(const uint8_t* buf, uint32_t len)
 
 static uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, int32_t *error)
 {
-    proxy_hdr_v2_t proxy_hdr_v2 = { PP2_SIG, '\x21', 0, 0 };
+    proxy_hdr_v2_t proxy_hdr_v2 = { { 0 }, '\x21', 0, 0 };
     uint16_t proxy_addr_len, padding_bytes, index;
     uint8_t padding_applied;
     uint32_t len;
@@ -737,6 +737,7 @@ static uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, 
     uint32_t i;
     uint8_t *pp2_hdr;
 
+    memcpy(proxy_hdr_v2.sig, PP2_SIG, sizeof(proxy_hdr_v2.sig));
     if (pp_info->address_family == ADDR_FAMILY_UNSPEC)
     {
         proxy_addr_len = 0;
