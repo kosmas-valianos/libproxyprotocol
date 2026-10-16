@@ -971,7 +971,6 @@ int main(void)
                 .pp2_info = {
                     .pp2_ssl_info = {
                         .ssl = 1,
-                        .cert_verified = 1,
                     },
                 },
             },
@@ -1137,6 +1136,21 @@ int main(void)
         if (pp_info_add_netns(&pp_info, NULL) != 0)
         {
             printf("FAILED\n");
+            return EXIT_FAILURE;
+        }
+        pp_info_clear(&pp_info);
+    }
+    printf("PASSED\n");
+
+    printf("Running test: pp_info_add_ssl cert_verified without cert_in_*...");
+    {
+        pp_info_t pp_info = { 0 };
+        pp_info.pp2_info.pp2_ssl_info.ssl = 1;
+        pp_info.pp2_info.pp2_ssl_info.cert_verified = 1;
+        if (pp_info_add_ssl(&pp_info, "TLSv1.3", NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 0) != 0)
+        {
+            printf("FAILED\n");
+            pp_info_clear(&pp_info);
             return EXIT_FAILURE;
         }
         pp_info_clear(&pp_info);

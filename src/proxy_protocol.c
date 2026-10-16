@@ -373,6 +373,10 @@ uint8_t pp_info_add_ssl(pp_info_t *pp_info, const char *version, const char *cip
     uint8_t *value = NULL;
     uint8_t rc;
 
+    if (pp2_ssl_info->cert_verified && !(client & (PP2_CLIENT_CERT_CONN | PP2_CLIENT_CERT_SESS)))
+    {
+        return 0;
+    }
     if (version_value_len)
     {
         length += sizeof_pp2_tlv_t + version_value_len;
@@ -1243,7 +1247,9 @@ static int32_t pp2_parse_hdr(const uint8_t *buffer, uint32_t buffer_length, pp_i
             pp_info->pp2_info.pp2_ssl_info.ssl = !!(pp2_tlv_ssl->client & PP2_CLIENT_SSL);
             pp_info->pp2_info.pp2_ssl_info.cert_in_connection = !!(pp2_tlv_ssl->client & PP2_CLIENT_CERT_CONN);
             pp_info->pp2_info.pp2_ssl_info.cert_in_session = !!(pp2_tlv_ssl->client & PP2_CLIENT_CERT_SESS);
-            pp_info->pp2_info.pp2_ssl_info.cert_verified = !pp2_tlv_ssl->verify;
+            /* verify == 0 only means verified if the client presented a certificate */
+            pp_info->pp2_info.pp2_ssl_info.cert_verified = !pp2_tlv_ssl->verify
+                && (pp2_tlv_ssl->client & (PP2_CLIENT_CERT_CONN | PP2_CLIENT_CERT_SESS));
 
             pp2_tlvs_ssl_len = pp2_tlv_len - sizeof(pp2_tlv_ssl->client) - sizeof(pp2_tlv_ssl->verify);
             while (pp2_sub_tlv_offset + sizeof_pp2_tlv_t <= pp2_tlvs_ssl_len)
