@@ -17,15 +17,18 @@
 #
 
 CFLAGS := -Wall -Wextra -Wshadow -fshort-enums -fpic
+# BSD make does not predefine RM
+RM = rm -f
+
+# Without .PHONY the tests/ directory makes the tests target look up to date
+.PHONY: all build tests example clean
 
 all: build tests example
 
-build: libs_dir libs/libproxyprotocol.so
-
-libs_dir:
-	mkdir -p libs
+build: libs/libproxyprotocol.so
 
 libs/libproxyprotocol.so: src/proxy_protocol.o
+	mkdir -p libs
 	$(CC) -shared -o $@ src/proxy_protocol.o
 
 src/proxy_protocol.o: src/proxy_protocol.c src/proxy_protocol.h
