@@ -1348,7 +1348,8 @@ static int32_t pp2_parse_hdr(const uint8_t *buffer, uint32_t buffer_length, pp_i
             break;
         }
         buffer += pp2_tlv_offset;
-        tlv_vectors_len -= pp2_tlv_offset;
+        /* Lossless: the check above guarantees pp2_tlv_offset <= tlv_vectors_len */
+        tlv_vectors_len -= (uint16_t) pp2_tlv_offset;
     }
 
     return sizeof(proxy_hdr_v2_t) + len;
