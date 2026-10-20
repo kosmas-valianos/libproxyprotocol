@@ -16,29 +16,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #ifdef _WIN32
     #include <ws2tcpip.h>
-    /* Caution: To be used only with fixed length arrays */
-    #define _sprintf(buffer, format, ...) sprintf_s(buffer, sizeof(buffer), format, __VA_ARGS__)
 #else
     #include <sys/types.h>
     #include <sys/socket.h>
     #include <netinet/in.h>
     #include <arpa/inet.h>
-    #include <stdarg.h>
-    /* vsprintf() and vargs as snprintf and __VA_ARGS__ do not exist in ANSI C */
-    static int _sprintf(char *buffer, const char *format, ...)
-    {
-        int n;
-        va_list args;
-        va_start(args, format);
-        n = vsprintf(buffer, format, args);
-        va_end(args);
-        return n;
-    }
 #endif
 
 #include "proxy_protocol.h"
@@ -174,6 +160,12 @@ typedef struct
 /****************************************************************/
 
 #pragma pack()
+
+/* #pragma pack is not ANSI C: a compiler may ignore it (cproc and CompCert do)
+ * or still pad the struct size (TriCore GCC). The v2 SSL and Azure TLVs would
+ * then break at run time, so fail the build instead: the array size is -1 if
+ * the structs are not packed */
+typedef char pp_static_assert_packed[sizeof(pp2_tlv_ssl_t) == 9 && sizeof(pp2_tlv_azure_t) == 5 ? 1 : -1];
 
 static const char *errors[] = {
     "No error",
@@ -373,6 +365,10 @@ uint8_t pp_info_add_ssl(pp_info_t *pp_info, const char *version, const char *cip
     uint8_t *value = NULL;
     uint8_t rc;
 
+    if (pp2_ssl_info->cert_verified && !(client & (PP2_CLIENT_CERT_CONN | PP2_CLIENT_CERT_SESS)))
+    {
+        return 0;
+    }
     if (version_value_len)
     {
         length += sizeof_pp2_tlv_t + version_value_len;
@@ -720,7 +716,7 @@ static uint32_t crc32c(const uint8_t* buf, uint32_t len)
 
 static uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, int32_t *error)
 {
-    proxy_hdr_v2_t proxy_hdr_v2 = { PP2_SIG, '\x21', 0, 0 };
+    proxy_hdr_v2_t proxy_hdr_v2 = { { 0 }, '\x21', 0, 0 };
     uint16_t proxy_addr_len, padding_bytes, index;
     uint8_t padding_applied;
     uint32_t len;
@@ -729,6 +725,7 @@ static uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, 
     uint32_t i;
     uint8_t *pp2_hdr;
 
+    memcpy(proxy_hdr_v2.sig, PP2_SIG, sizeof(proxy_hdr_v2.sig));
     if (pp_info->address_family == ADDR_FAMILY_UNSPEC)
     {
         proxy_addr_len = 0;
@@ -915,6 +912,33 @@ static int32_t pp1_ip_error(int af, int is_src)
     return is_src ? -ERR_PP1_IPV6_SRC_IP : -ERR_PP1_IPV6_DST_IP;
 }
 
+/* The v1 line is built with pp1_append() and pp1_port_str() instead of
+ * sprintf(): C89 has no snprintf() and sprintf()/vsprintf() are deprecated
+ * on macOS */
+
+/* Copies s followed by sep to p and returns the position after them */
+static char *pp1_append(char *p, const char *s, char sep)
+{
+    size_t len = strlen(s);
+    memcpy(p, s, len);
+    p[len] = sep;
+    return p + len + 1;
+}
+
+/* Writes port in decimal into buf, which must hold 6 chars, and returns a
+ * pointer to the first digit */
+static const char *pp1_port_str(char *buf, uint16_t port)
+{
+    char *p = buf + 5;
+    *p = '\0';
+    do
+    {
+        *--p = (char)('0' + port % 10);
+        port /= 10;
+    } while (port);
+    return p;
+}
+
 static uint8_t *pp1_create_hdr(const pp_info_t *pp_info, uint16_t *pp1_hdr_len, int32_t *error)
 {
     char block[PP1_MAX_LENGTH];
@@ -938,8 +962,9 @@ static uint8_t *pp1_create_hdr(const pp_info_t *pp_info, uint16_t *pp1_hdr_len, 
         char dst_addr[INET6_ADDRSTRLEN];
         const char *fam = pp_info->address_family == ADDR_FAMILY_INET ? "TCP4" : "TCP6";
         int af = pp_info->address_family == ADDR_FAMILY_INET ? AF_INET : AF_INET6;
-        int written;
         struct in6_addr src_bin, dst_bin;
+        char port[6];
+        char *p;
 
         if (inet_pton(af, pp_info->src_addr, &src_bin) != 1)
         {
@@ -953,8 +978,8 @@ static uint8_t *pp1_create_hdr(const pp_info_t *pp_info, uint16_t *pp1_hdr_len, 
         }
 
         /* Normalise via inet_ntop(): regardless of the input length, the
-         * canonical output is at most 39 chars (full IPv6 hextet form), keeping
-         * the line within the PROXY v1 limit */
+         * canonical output is usually at most 39 chars (full IPv6 hextet
+         * form), keeping the line within the PROXY v1 limit */
         if (!inet_ntop(af, &src_bin, src_addr, sizeof(src_addr)))
         {
             *error = pp1_ip_error(af, 1);
@@ -967,23 +992,22 @@ static uint8_t *pp1_create_hdr(const pp_info_t *pp_info, uint16_t *pp1_hdr_len, 
         }
 
         /* 27 = "PROXY " + "TCPx"(4) + 4 spaces + 2 ports(<=5) + "\r\n" + NUL.
-         * Canonical inet_ntop() output is <= 39 chars each, so this always fits;
-         * the runtime guard stays because _sprintf() is an unbounded vsprintf()
-         * on ANSI C targets (no snprintf() in C89) */
+         * Windows inet_ntop() prints ISATAP addresses with an embedded IPv4
+         * address (up to 44 chars), so two of them do not fit. The guard also
+         * keeps the unbounded copies below inside block */
         if (strlen(src_addr) + strlen(dst_addr) + 27 > sizeof(block))
         {
             *error = -ERR_HEAP_ALLOC;
             return NULL;
         }
-        /* The bound check above guarantees the line fits, so this only catches a
-         * _sprintf() error (vsprintf()/sprintf_s() return a negative value) */
-        written = _sprintf(block, "PROXY %s %s %s %hu %hu"CRLF, fam, src_addr, dst_addr, pp_info->src_port, pp_info->dst_port);
-        if (written <= 0)
-        {
-            *error = -ERR_HEAP_ALLOC;
-            return NULL;
-        }
-        *pp1_hdr_len = (uint16_t)written;
+        p = pp1_append(block, PP1_SIG, ' ');
+        p = pp1_append(p, fam, ' ');
+        p = pp1_append(p, src_addr, ' ');
+        p = pp1_append(p, dst_addr, ' ');
+        p = pp1_append(p, pp1_port_str(port, pp_info->src_port), ' ');
+        p = pp1_append(p, pp1_port_str(port, pp_info->dst_port), '\r');
+        *p++ = '\n';
+        *pp1_hdr_len = (uint16_t)(p - block);
     }
     else
     {
@@ -1243,7 +1267,9 @@ static int32_t pp2_parse_hdr(const uint8_t *buffer, uint32_t buffer_length, pp_i
             pp_info->pp2_info.pp2_ssl_info.ssl = !!(pp2_tlv_ssl->client & PP2_CLIENT_SSL);
             pp_info->pp2_info.pp2_ssl_info.cert_in_connection = !!(pp2_tlv_ssl->client & PP2_CLIENT_CERT_CONN);
             pp_info->pp2_info.pp2_ssl_info.cert_in_session = !!(pp2_tlv_ssl->client & PP2_CLIENT_CERT_SESS);
-            pp_info->pp2_info.pp2_ssl_info.cert_verified = !pp2_tlv_ssl->verify;
+            /* verify == 0 only means verified if the client presented a certificate */
+            pp_info->pp2_info.pp2_ssl_info.cert_verified = !pp2_tlv_ssl->verify
+                && (pp2_tlv_ssl->client & (PP2_CLIENT_CERT_CONN | PP2_CLIENT_CERT_SESS));
 
             pp2_tlvs_ssl_len = pp2_tlv_len - sizeof(pp2_tlv_ssl->client) - sizeof(pp2_tlv_ssl->verify);
             while (pp2_sub_tlv_offset + sizeof_pp2_tlv_t <= pp2_tlvs_ssl_len)
@@ -1337,7 +1363,8 @@ static int32_t pp2_parse_hdr(const uint8_t *buffer, uint32_t buffer_length, pp_i
             break;
         }
         buffer += pp2_tlv_offset;
-        tlv_vectors_len -= pp2_tlv_offset;
+        /* Lossless: the check above guarantees pp2_tlv_offset <= tlv_vectors_len */
+        tlv_vectors_len -= (uint16_t) pp2_tlv_offset;
     }
 
     return sizeof(proxy_hdr_v2_t) + len;

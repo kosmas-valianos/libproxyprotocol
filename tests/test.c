@@ -971,7 +971,6 @@ int main(void)
                 .pp2_info = {
                     .pp2_ssl_info = {
                         .ssl = 1,
-                        .cert_verified = 1,
                     },
                 },
             },
@@ -1143,6 +1142,21 @@ int main(void)
     }
     printf("PASSED\n");
 
+    printf("Running test: pp_info_add_ssl cert_verified without cert_in_*...");
+    {
+        pp_info_t pp_info = { 0 };
+        pp_info.pp2_info.pp2_ssl_info.ssl = 1;
+        pp_info.pp2_info.pp2_ssl_info.cert_verified = 1;
+        if (pp_info_add_ssl(&pp_info, "TLSv1.3", NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 0) != 0)
+        {
+            printf("FAILED\n");
+            pp_info_clear(&pp_info);
+            return EXIT_FAILURE;
+        }
+        pp_info_clear(&pp_info);
+    }
+    printf("PASSED\n");
+
     printf("Running test: pp_info_add_aws_vpce_id NULL...");
     {
         pp_info_t pp_info = { 0 };
@@ -1210,6 +1224,48 @@ int main(void)
         }
         pp_info_clear(&pp_info_out);
         free(pp_hdr);
+    }
+    printf("PASSED\n");
+
+    /* The v1 line is built without sprintf(): check its exact bytes, including
+     * the shortest and longest ports */
+    printf("Running test: v1 create exact lines...");
+    {
+        static const struct
+        {
+            uint8_t     address_family;
+            const char *src_addr;
+            const char *dst_addr;
+            uint16_t    src_port;
+            uint16_t    dst_port;
+            const char *line;
+        } cases[] = {
+            { ADDR_FAMILY_INET, "1.2.3.4", "255.255.255.255", 0, 65535, "PROXY TCP4 1.2.3.4 255.255.255.255 0 65535\r\n" },
+            { ADDR_FAMILY_INET6, "fd00::2", "::1", 9, 10, "PROXY TCP6 fd00::2 ::1 9 10\r\n" },
+        };
+        size_t k;
+        for (k = 0; k < NUM_ELEMS(cases); k++)
+        {
+            pp_info_t pp_info = { 0 };
+            uint16_t pp_hdr_len = 0;
+            int32_t error = ERR_NULL;
+            uint8_t *pp_hdr;
+            pp_info.address_family = cases[k].address_family;
+            pp_info.transport_protocol = TRANSPORT_PROTOCOL_STREAM;
+            strcpy(pp_info.src_addr, cases[k].src_addr);
+            strcpy(pp_info.dst_addr, cases[k].dst_addr);
+            pp_info.src_port = cases[k].src_port;
+            pp_info.dst_port = cases[k].dst_port;
+            pp_hdr = pp_create_hdr(1, &pp_info, &pp_hdr_len, &error);
+            if (!pp_hdr || error != ERR_NULL || strlen(cases[k].line) != pp_hdr_len
+                || memcmp(pp_hdr, cases[k].line, pp_hdr_len))
+            {
+                printf("FAILED\n");
+                free(pp_hdr);
+                return EXIT_FAILURE;
+            }
+            free(pp_hdr);
+        }
     }
     printf("PASSED\n");
 
