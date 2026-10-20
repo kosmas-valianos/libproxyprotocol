@@ -1227,6 +1227,48 @@ int main(void)
     }
     printf("PASSED\n");
 
+    /* The v1 line is built without sprintf(): check its exact bytes, including
+     * the shortest and longest ports */
+    printf("Running test: v1 create exact lines...");
+    {
+        static const struct
+        {
+            uint8_t     address_family;
+            const char *src_addr;
+            const char *dst_addr;
+            uint16_t    src_port;
+            uint16_t    dst_port;
+            const char *line;
+        } cases[] = {
+            { ADDR_FAMILY_INET, "1.2.3.4", "255.255.255.255", 0, 65535, "PROXY TCP4 1.2.3.4 255.255.255.255 0 65535\r\n" },
+            { ADDR_FAMILY_INET6, "fd00::2", "::1", 9, 10, "PROXY TCP6 fd00::2 ::1 9 10\r\n" },
+        };
+        size_t k;
+        for (k = 0; k < NUM_ELEMS(cases); k++)
+        {
+            pp_info_t pp_info = { 0 };
+            uint16_t pp_hdr_len = 0;
+            int32_t error = ERR_NULL;
+            uint8_t *pp_hdr;
+            pp_info.address_family = cases[k].address_family;
+            pp_info.transport_protocol = TRANSPORT_PROTOCOL_STREAM;
+            strcpy(pp_info.src_addr, cases[k].src_addr);
+            strcpy(pp_info.dst_addr, cases[k].dst_addr);
+            pp_info.src_port = cases[k].src_port;
+            pp_info.dst_port = cases[k].dst_port;
+            pp_hdr = pp_create_hdr(1, &pp_info, &pp_hdr_len, &error);
+            if (!pp_hdr || error != ERR_NULL || strlen(cases[k].line) != pp_hdr_len
+                || memcmp(pp_hdr, cases[k].line, pp_hdr_len))
+            {
+                printf("FAILED\n");
+                free(pp_hdr);
+                return EXIT_FAILURE;
+            }
+            free(pp_hdr);
+        }
+    }
+    printf("PASSED\n");
+
     /* Regression: alignment_power >= 16 used to make 1 << power overflow the
      * uint16_t alignment (division by zero / signed overflow). It must now be
      * rejected with -ERR_PP2_LENGTH instead of crashing. */
