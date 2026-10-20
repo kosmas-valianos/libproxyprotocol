@@ -232,6 +232,20 @@ uint8_t pp2_hdr_usascii_tlv_at_end[] = {
             0x41,                   /* "A" - last byte of the buffer */
 };
 
+/* v2 header with an Azure LINKID TLV. Azure sends the LINKID in little-endian */
+static const uint32_t test_azure_linkid_le = 0x12345678;
+uint8_t pp2_hdr_azure[] = {
+            0x0d, 0x0a, 0x0d, 0x0a, /* Start of v2 signature */
+            0x00, 0x0d, 0x0a, 0x51,
+            0x55, 0x49, 0x54, 0x0a, /* End of v2 signature */
+            0x21, 0x11, 0x00, 0x14, /* ver_cmd, fam and len (20) */
+            0xc0, 0xa8, 0x0a, 0x64, /* Source IP */
+            0xc0, 0xa8, 0x0b, 0x5a, /* Destination IP */
+            0xa5, 0x5c, 0x1f, 0x90, /* Source port, Destination port */
+            0xee, 0x00, 0x05, 0x01, /* PP2_TYPE_AZURE TLV, PP2_SUBTYPE_AZURE_PRIVATEENDPOINT_LINKID */
+            0x78, 0x56, 0x34, 0x12, /* LINKID 0x12345678 */
+};
+
 static uint8_t pp_add_tlvs(pp_info_t *pp_info, const test_tlv_t (*add_tlvs)[10])
 {
     uint8_t i;
@@ -378,11 +392,13 @@ static uint8_t pp_verify_tlvs(const pp_info_t *pp_info, const test_tlv_t (*expec
             {
                 uint32_t linkid_expected, linkid_got;
                 tlv_value = pp_info_get_azure_linkid(pp_info, &tlv_value_len);
-                if (!tlv_value)
+                if (!tlv_value || tlv_value_len != sizeof(uint32_t))
                 {
                     return 0;
                 }
-                memcpy(&linkid_got, tlv_value, sizeof(uint32_t));
+                /* The LINKID is little-endian */
+                linkid_got = (uint32_t) tlv_value[0] | (uint32_t) tlv_value[1] << 8
+                    | (uint32_t) tlv_value[2] << 16 | (uint32_t) tlv_value[3] << 24;
                 memcpy(&linkid_expected, test_tlv->value, sizeof(uint32_t));
                 if (linkid_got != linkid_expected)
                 {
@@ -1029,6 +1045,23 @@ int main(void)
             },
             .expected_tlvs = {
                 { .type = PP2_TYPE_NETNS, .value_len = 1, .value = (const uint8_t*) "A" },
+            },
+        },
+        {
+            .name = "v2 PROXY protocol header: PP2_TYPE_AZURE LINKID in little-endian",
+            .raw_bytes_in = pp2_hdr_azure,
+            .raw_bytes_in_length = sizeof(pp2_hdr_azure),
+            .rc_expected = sizeof(pp2_hdr_azure),
+            .pp_info_out_expected = {
+                .address_family = ADDR_FAMILY_INET,
+                .transport_protocol = TRANSPORT_PROTOCOL_STREAM,
+                .src_addr = "192.168.10.100",
+                .dst_addr = "192.168.11.90",
+                .src_port = 42332,
+                .dst_port = 8080,
+            },
+            .expected_tlvs = {
+                { .type = PP2_TYPE_AZURE, .value_len = 4, .value = (const uint8_t*) &test_azure_linkid_le },
             },
         },
     };

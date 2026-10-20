@@ -126,8 +126,9 @@ else
 {
     uint16_t length, cn_length;
     const uint8_t *azure_linkid = pp_info_get_azure_linkid(&pp_info_out, &length);
-    uint32_t linkid;
-    memcpy(&linkid, azure_linkid, length);
+    /* The LINKID is little-endian */
+    uint32_t linkid = (uint32_t) azure_linkid[0] | (uint32_t) azure_linkid[1] << 8
+        | (uint32_t) azure_linkid[2] << 16 | (uint32_t) azure_linkid[3] << 24;
     const uint8_t *cn = pp_info_get_ssl_cn(&pp_info_out, &cn_length);
     printf("%d bytes PROXY protocol header:\n"
             "\tAzure Link ID: %u\n"

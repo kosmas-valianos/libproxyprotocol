@@ -473,18 +473,14 @@ uint8_t pp_info_add_aws_vpce_id(pp_info_t *pp_info, const char *vpce_id)
 
 uint8_t pp_info_add_azure_linkid(pp_info_t *pp_info, uint32_t linkid)
 {
-    uint16_t length = (uint16_t) sizeof(pp2_tlv_azure_t);
-    pp2_tlv_azure_t *pp2_tlv_azure = malloc(length);
-    uint8_t rc;
-    if (!pp2_tlv_azure)
-    {
-        return 0;
-    }
-    pp2_tlv_azure->type = PP2_SUBTYPE_AZURE_PRIVATEENDPOINT_LINKID;
-    pp2_tlv_azure->linkid = linkid;
-    rc = tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, PP2_TYPE_AZURE, length, pp2_tlv_azure);
-    free(pp2_tlv_azure);
-    return rc;
+    /* Subtype and LINKID, which Azure encodes in little-endian */
+    uint8_t value[5];
+    value[0] = PP2_SUBTYPE_AZURE_PRIVATEENDPOINT_LINKID;
+    value[1] = (uint8_t) linkid;
+    value[2] = (uint8_t) (linkid >> 8);
+    value[3] = (uint8_t) (linkid >> 16);
+    value[4] = (uint8_t) (linkid >> 24);
+    return tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, PP2_TYPE_AZURE, (uint16_t) sizeof(value), value);
 }
 
 static void tlv_array_clear(tlv_array_t *tlv_array)
