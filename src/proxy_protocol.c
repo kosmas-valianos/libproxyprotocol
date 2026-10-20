@@ -473,18 +473,14 @@ uint8_t pp_info_add_aws_vpce_id(pp_info_t *pp_info, const char *vpce_id)
 
 uint8_t pp_info_add_azure_linkid(pp_info_t *pp_info, uint32_t linkid)
 {
-    uint16_t length = (uint16_t) sizeof(pp2_tlv_azure_t);
-    pp2_tlv_azure_t *pp2_tlv_azure = malloc(length);
-    uint8_t rc;
-    if (!pp2_tlv_azure)
-    {
-        return 0;
-    }
-    pp2_tlv_azure->type = PP2_SUBTYPE_AZURE_PRIVATEENDPOINT_LINKID;
-    pp2_tlv_azure->linkid = linkid;
-    rc = tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, PP2_TYPE_AZURE, length, pp2_tlv_azure);
-    free(pp2_tlv_azure);
-    return rc;
+    /* Subtype and LINKID, which Azure encodes in little-endian */
+    uint8_t value[5];
+    value[0] = PP2_SUBTYPE_AZURE_PRIVATEENDPOINT_LINKID;
+    value[1] = (uint8_t) linkid;
+    value[2] = (uint8_t) (linkid >> 8);
+    value[3] = (uint8_t) (linkid >> 16);
+    value[4] = (uint8_t) (linkid >> 24);
+    return tlv_array_append_tlv_new(&pp_info->pp2_info.tlv_array, PP2_TYPE_AZURE, (uint16_t) sizeof(value), value);
 }
 
 static void tlv_array_clear(tlv_array_t *tlv_array)
@@ -886,6 +882,8 @@ static uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, 
         index += sizeof_pp2_tlv_t;
         memset(pp2_hdr + index, 0, sizeof(uint32_t));
         crc32c_calculated = crc32c(pp2_hdr, *pp2_hdr_len);
+        /* Network byte order, like the other numbers in the header */
+        crc32c_calculated = htonl(crc32c_calculated);
         memcpy(pp2_hdr + index, &crc32c_calculated, sizeof(uint32_t));
     }
 
@@ -1223,7 +1221,8 @@ static int32_t pp2_parse_hdr(const uint8_t *buffer, uint32_t buffer_length, pp_i
             crc = crc32c_continue(0xffffffff, pp2_hdr, offset_to_chksum_value);
             crc = crc32c_continue(crc, zeros, sizeof(uint32_t));
             crc = crc32c_continue(crc, pp2_hdr + after_chksum_offset, total_hdr_len - after_chksum_offset);
-            crc32c_calculated = crc ^ 0xffffffff;
+            /* The received checksum is in network byte order */
+            crc32c_calculated = htonl(crc ^ 0xffffffff);
 
             /* Verify that the calculated CRC32c checksum is the same as the received CRC32c checksum */
             if (memcmp(&crc32c_chksum, &crc32c_calculated, 4))
