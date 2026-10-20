@@ -150,7 +150,8 @@ uint8_t pp_info_add_azure_linkid(pp_info_t *pp_info, uint32_t linkid);
  * pp_info  Pointer to a pp_info_t structure used in pp_parse()
  * length   Pointer to a uint16_t where the TLV's value length will be set
  * return   Pointer to a buffer holding the TLV's value if found else NULL.
- *          In case of US-ASCII value the buffer is NULL terminated
+ *          In case of US-ASCII value the buffer is NULL terminated.
+ *          Numbers are as on the wire: CRC32C in network byte order
  */
 const uint8_t *pp_info_get_alpn(const pp_info_t *pp_info, uint16_t *length);
 const uint8_t *pp_info_get_authority(const pp_info_t *pp_info, uint16_t *length);

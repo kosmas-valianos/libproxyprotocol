@@ -886,6 +886,8 @@ static uint8_t *pp2_create_hdr(const pp_info_t *pp_info, uint16_t *pp2_hdr_len, 
         index += sizeof_pp2_tlv_t;
         memset(pp2_hdr + index, 0, sizeof(uint32_t));
         crc32c_calculated = crc32c(pp2_hdr, *pp2_hdr_len);
+        /* Network byte order, like the other numbers in the header */
+        crc32c_calculated = htonl(crc32c_calculated);
         memcpy(pp2_hdr + index, &crc32c_calculated, sizeof(uint32_t));
     }
 
@@ -1223,7 +1225,8 @@ static int32_t pp2_parse_hdr(const uint8_t *buffer, uint32_t buffer_length, pp_i
             crc = crc32c_continue(0xffffffff, pp2_hdr, offset_to_chksum_value);
             crc = crc32c_continue(crc, zeros, sizeof(uint32_t));
             crc = crc32c_continue(crc, pp2_hdr + after_chksum_offset, total_hdr_len - after_chksum_offset);
-            crc32c_calculated = crc ^ 0xffffffff;
+            /* The received checksum is in network byte order */
+            crc32c_calculated = htonl(crc ^ 0xffffffff);
 
             /* Verify that the calculated CRC32c checksum is the same as the received CRC32c checksum */
             if (memcmp(&crc32c_chksum, &crc32c_calculated, 4))

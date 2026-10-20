@@ -91,8 +91,8 @@ uint8_t pp2_hdr_vpce[] = {
             0xc0, 0xa8, 0x0a, 0x64, /* Source IP */
             0xc0, 0xa8, 0x0b, 0x5a, /* Destination IP */
             0xa5, 0x5c, 0x1f, 0x90, /* Source port, Destination port */
-            0x03, 0x00, 0x04, 0xe5, /* CRC32C TLV start */
-            0x18, 0x86, 0xf8, 0xea, /* CRC32C TLV end, AWS VPCE ID TLV start */
+            0x03, 0x00, 0x04, 0xf8, /* CRC32C TLV start */
+            0x86, 0x18, 0xe5, 0xea, /* CRC32C TLV end, AWS VPCE ID TLV start */
             0x00, 0x17, 0x01, 0x76,
             0x70, 0x63, 0x65, 0x2d,
             0x32, 0x33, 0x64, 0x38,
@@ -477,7 +477,7 @@ int main(void)
                 {
                     .type = PP2_TYPE_CRC32C,
                     .value_len = 4,
-                    .value = (const uint8_t*) "\xe5\x18\x86\xf8"
+                    .value = (const uint8_t*) "\xf8\x86\x18\xe5"
                 },
                 {
                     .type = PP2_TYPE_AWS,
@@ -618,7 +618,7 @@ int main(void)
                 {
                     .type = PP2_TYPE_CRC32C,
                     .value_len = 4,
-                    .value = (const uint8_t*) "\x43\x84\x86\x4e"
+                    .value = (const uint8_t*) "\x4e\x86\x84\x43"
                 },
             },
             .pp_info_out_expected = tests[9].pp_info_in,
