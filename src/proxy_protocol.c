@@ -161,6 +161,12 @@ typedef struct
 
 #pragma pack()
 
+/* #pragma pack is not ANSI C: a compiler may ignore it (cproc and CompCert do)
+ * or still pad the struct size (TriCore GCC). The v2 SSL and Azure TLVs would
+ * then break at run time, so fail the build instead: the array size is -1 if
+ * the structs are not packed */
+typedef char pp_static_assert_packed[sizeof(pp2_tlv_ssl_t) == 9 && sizeof(pp2_tlv_azure_t) == 5 ? 1 : -1];
+
 static const char *errors[] = {
     "No error",
     "Invalid PROXY protocol version given. Only 1 and 2 are valid",
